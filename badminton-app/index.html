@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>배드민턴 대진표</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:,">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 10px;
+      max-width: 980px;
+      margin: 0 auto;
+    }
+
+    h1, h3 {
+      margin-top: 18px;
+      margin-bottom: 10px;
+    }
+
+    input, select {
+      font-size: 18px;
+      padding: 6px;
+      margin: 4px;
+      width: 120px;
+      box-sizing: border-box;
+    }
+
+    button {
+      font-size: 16px;
+      padding: 10px 14px;
+      margin: 5px;
+      cursor: pointer;
+    }
+
+    .match {
+      border: 2px solid #222;
+      padding: 15px;
+      margin: 10px 0;
+      font-size: 20px;
+      border-radius: 10px;
+      background: #f2f2f2;
+      cursor: pointer;
+    }
+
+    .match.done {
+      background: #dcffdc;
+      border-color: #238823;
+    }
+
+    .section-box {
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      padding: 12px;
+      margin-top: 10px;
+      background: #fafafa;
+    }
+
+    .small {
+      font-size: 14px;
+      color: #666;
+    }
+
+    .winnerText {
+      color: #0a7a0a;
+      font-weight: bold;
+    }
+
+    .danger {
+      color: #c00;
+      font-weight: bold;
+    }
+
+    .editText {
+      color: #005bbb;
+      font-weight: bold;
+    }
+
+    .hostOnly {
+      border: 1px dashed #999;
+      padding: 8px;
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+
+    #scoreboard {
+      display: none;
+      position: fixed;
+      top: 6%;
+      left: 5%;
+      width: 90%;
+      max-width: 640px;
+      background: white;
+      border: 3px solid black;
+      padding: 20px;
+      border-radius: 12px;
+      z-index: 999;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    }
+
+    #scoreA, #scoreB {
+      font-size: 42px;
+      font-weight: bold;
+      margin-left: 10px;
+    }
+
+    .room-badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: #eee;
+      font-size: 13px;
+    }
+
+    .courtBadge {
+      display: inline-block;
+      font-size: 13px;
+      font-weight: bold;
+      background: #e8f1ff;
+      color: #005bbb;
+      border-radius: 999px;
+      padding: 4px 10px;
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🏸 배드민턴 대진표</h1>
+
+  <div class="section-box">
+    <h3>방 연결</h3>
+    <div class="controls">
+      <input id="roomCodeInput" placeholder="방코드">
+      <button onclick="createRoom()">방 생성</button>
+      <button onclick="joinRoom()">방 입장</button>
+      <button onclick="copyPlayerLink()">참가자 링크 복사</button>
+      <button onclick="copyHostLink()">방장 링크 복사</button>
+    </div>
+    <div id="roomInfo" class="small">연결된 방 없음</div>
+    <div id="syncStatus" class="small">서버 미연결</div>
+  </div>
+
+  <h3>참가자</h3>
+  <div>
+    <input id="p1" placeholder="참가자1">
+    <input id="p2" placeholder="참가자2">
+    <input id="p3" placeholder="참가자3">
+    <input id="p4" placeholder="참가자4">
+    <input id="p5" placeholder="참가자5">
+    <input id="p6" placeholder="참가자6">
+    <input id="p7" placeholder="참가자7">
+    <input id="p8" placeholder="참가자8">
+  </div>
+
+  <div class="section-box hostOnly">
+    <h3>고정 팀 설정 <span class="room-badge">방장 전용</span></h3>
+    <input id="fixed1" placeholder="선수1">
+    <input id="fixed2" placeholder="선수2">
+    <input id="fixedRound" type="number" min="1" placeholder="라운드">
+    <button onclick="addFixedTeam()">고정팀 추가</button>
+    <div id="fixedList" class="small">설정된 고정팀 없음</div>
+  </div>
+
+  <div class="section-box hostOnly">
+    <div class="controls">
+      <button id="makeBtn" onclick="makeMatch()">대진 생성</button>
+      <button id="nextRoundBtn" onclick="goNextRound()" style="display:none;">다음 라운드</button>
+      <button onclick="undoRound()">이전 완료 라운드로 복구</button>
+      <button onclick="resetAll()">전체 초기화</button>
+    </div>
+  </div>
+
+  <div class="section-box hostOnly">
+    <h3>핸디캡 패 추가 <span class="room-badge">방장 전용</span></h3>
+    <select id="penaltyPlayer"></select>
+    <button onclick="addPenalty()">핸디캡 패 +1</button>
+  </div>
+
+  <div class="section-box">
+    <h3>이번 라운드 대기</h3>
+    <div id="waitingPlayers">없음</div>
+  </div>
+
+  <h3>대진표</h3>
+  <div id="match"></div>
+
+  <h3>패배 기록</h3>
+  <div id="score"></div>
+
+  <h3>라운드 기록</h3>
+  <div id="history"></div>
+
+  <div id="scoreboard">
+    <h3 id="scoreRoundLabel"></h3>
+    <div id="editModeLabel" class="editText"></div>
+
+    <h3 id="teamA"></h3>
+    <button onclick="addScore(0)">+1</button>
+    <span id="scoreA">0</span>
+
+    <br><br>
+
+    <h3 id="teamB"></h3>
+    <button onclick="addScore(1)">+1</button>
+    <span id="scoreB">0</span>
+
+    <br><br>
+    <div id="courtNotice" class="danger"></div>
+
+    <br>
+    <button onclick="undoScore()">점수 되돌리기</button>
+    <button onclick="finishGame()">경기 종료</button>
+    <button onclick="cancelMatch()">닫기</button>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="script.js"></script>
+</body>
+</html>
