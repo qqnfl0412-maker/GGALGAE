@@ -1902,10 +1902,10 @@ async function joinRoom() {
     .maybeSingle();
 
   if (error || !data) {
-    console.error(error);
-    alert("방을 찾지 못했어.");
-    return;
-  }
+  console.error("방 조회 실패:", error, data);
+  alert("방을 찾지 못했어.");
+  return;
+}
 
   currentRoomCode = roomCode;
 
