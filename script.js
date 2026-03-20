@@ -50,7 +50,7 @@ let hostActionBusy = false;
 
 // Supabase 정보
 const SUPABASE_URL = "https://crzulknhwcvhepajsxnl.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzIiwicmVmIjoiY3J6dWxrbmh3Y3ZoZXBhanN4bmwiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc3MzUxNjkyNCwiZXhwIjoyMDg5MDkyOTI0fQ.EwbPzEZ4LQMrHxDLEz0MElsAdPj2k9DPXFl_2Kczbyw";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJpc3MiLCJyZWYiOiJjcnp1bGtuaHdjdmhlcGFqc3hubCIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzczNTE2OTI0LCJleHAiOjIwODkwOTI5MjR9.EwbPzEZ4LQMrHxDLEz0MElsAdPj2k9DPXFl_2Kczbyw";
 
 function pairKey(a, b) {
   return [a, b].sort().join("|");
