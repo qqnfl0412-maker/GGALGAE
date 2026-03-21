@@ -51,7 +51,7 @@ let scoreInputBusy = false;
 let hostActionBusy = false;
 
 let currentPage = "home";
-let scoreLandscapeMode = false;
+let scoreRefereeMode = false;
 
 const SUPABASE_URL = "https://crzulknhwcvhepajsxnl.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyenVsa25od2N2aGVwYWpzeG5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MTY5MjQsImV4cCI6MjA4OTA5MjkyNH0.EwbPzEZ4LQMrHxDLEz0MElsAdPj2k9DPXFl_2Kczbyw";
@@ -396,6 +396,19 @@ function updateCurrentRoundLabel() {
   if (el) el.innerText = round;
 }
 
+function isPortraitViewport() {
+  return window.innerHeight > window.innerWidth;
+}
+
+function applyForcedRotatedClass() {
+  if (!scoreRefereeMode) return;
+  if (isPortraitViewport()) {
+    document.body.classList.add("force-rotated");
+  } else {
+    document.body.classList.remove("force-rotated");
+  }
+}
+
 function updateFloatingRoomStatus() {
   const wrap = document.getElementById("floatingRoomStatus");
   const text = document.getElementById("floatingRoomText");
@@ -403,7 +416,7 @@ function updateFloatingRoomStatus() {
 
   if (!wrap || !text || !dot) return;
 
-  if (currentPage === "home" || scoreLandscapeMode) {
+  if (currentPage === "home" || scoreRefereeMode) {
     wrap.classList.remove("show");
     return;
   }
@@ -433,7 +446,7 @@ function renderScoreMatchList() {
   if (!el) return;
 
   if (!currentMatches.length) {
-    el.innerHTML = `<div class="small">진행 중인 경기가 없어.</div>`;
+    el.innerHTML = `<div class="score-empty-text">진행 중인 경기가 없어.</div>`;
     return;
   }
 
@@ -466,32 +479,51 @@ function showSplashThenApp() {
   }, 1200);
 }
 
-async function enterScoreLandscapeMode() {
-  scoreLandscapeMode = true;
-  document.body.classList.add("score-landscape");
+async function enterFullscreenIfPossible() {
+  const el = document.documentElement;
+  try {
+    if (!document.fullscreenElement && el.requestFullscreen) {
+      await el.requestFullscreen();
+    }
+  } catch (e) {
+    console.log("전체화면 진입 미지원", e);
+  }
+}
+
+async function enterScoreRefereeMode() {
+  scoreRefereeMode = true;
+  document.body.classList.add("score-referee-mode");
+  applyForcedRotatedClass();
   updateFloatingRoomStatus();
+
+  await enterFullscreenIfPossible();
 
   try {
     if (screen.orientation && screen.orientation.lock) {
       await screen.orientation.lock("landscape");
     }
   } catch (e) {
-    console.log("가로 회전 잠금은 브라우저/기기에서 지원되지 않음", e);
+    console.log("가로 잠금 미지원, CSS 회전으로 대체", e);
   }
 }
 
-async function leaveScoreLandscapeMode() {
-  scoreLandscapeMode = false;
-  document.body.classList.remove("score-landscape");
+async function leaveScoreRefereeMode() {
+  scoreRefereeMode = false;
+  document.body.classList.remove("score-referee-mode");
+  document.body.classList.remove("force-rotated");
   updateFloatingRoomStatus();
 
   try {
     if (screen.orientation && screen.orientation.unlock) {
       screen.orientation.unlock();
     }
-  } catch (e) {
-    console.log("회전 잠금 해제 미지원", e);
-  }
+  } catch (e) {}
+
+  try {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      await document.exitFullscreen();
+    }
+  } catch (e) {}
 }
 
 function clearSelectedMatch() {
@@ -516,7 +548,7 @@ function goPage(name) {
   currentPage = name;
 
   if (prevPage === "score" && name !== "score") {
-    leaveScoreLandscapeMode();
+    leaveScoreRefereeMode();
   }
 
   document.querySelectorAll(".page").forEach(el => {
@@ -532,7 +564,7 @@ function goPage(name) {
   });
 
   if (name === "score") {
-    enterScoreLandscapeMode();
+    enterScoreRefereeMode();
   }
 
   updateFloatingRoomStatus();
@@ -2011,10 +2043,7 @@ async function loadRoomStateFromServer() {
 
   refreshRoundActionButtons();
 
-  if (
-    currentScoreMatch >= 0 &&
-    currentMatches[currentScoreMatch]
-  ) {
+  if (currentScoreMatch >= 0 && currentMatches[currentScoreMatch]) {
     document.getElementById("scoreRoundLabel").innerText = `Round ${round} / 경기 ${currentScoreMatch + 1}`;
     document.getElementById("editModeLabel").innerText = currentMatches[currentScoreMatch].finished ? "수정 모드" : "";
     updateScoreBoard();
@@ -2280,6 +2309,9 @@ function setupPlayerSync() {
     });
   }
 }
+
+window.addEventListener("resize", applyForcedRotatedClass);
+window.addEventListener("orientationchange", applyForcedRotatedClass);
 
 window.addEventListener("load", async () => {
   initSupabase();
