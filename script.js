@@ -17,6 +17,12 @@ let editMode = false;
 let restoredCompletedRound = false;
 let restoredSnapshotIndex = -1;
 
+// 현재 기기 식별값
+let clientId = "";
+
+// 다음 라운드 진행 권한 소유자
+let nextRoundOwnerId = "";
+
 // 통계
 let teamPairCount = {};
 let opponentPairCount = {};
@@ -92,12 +98,26 @@ function combination(arr, k) {
   return result;
 }
 
+function getOrCreateClientId() {
+  const key = "badminton_client_id";
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = "client_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
+
 function ensureHost(actionName = "이 기능") {
   if (!isHost) {
     alert(`${actionName}은(는) 방장만 사용할 수 있어.`);
     return false;
   }
   return true;
+}
+
+function canManageNextRound() {
+  return isHost || (!!clientId && !!nextRoundOwnerId && clientId === nextRoundOwnerId);
 }
 
 function beginHostAction() {
@@ -134,54 +154,9 @@ function setSyncStatus(text) {
   if (el) el.innerText = text;
 }
 
-function showMakeButton() {
-  const makeBtn = document.getElementById("makeBtn");
-  const nextRoundBtn = document.getElementById("nextRoundBtn");
-  if (makeBtn) makeBtn.style.display = "inline-block";
-  if (nextRoundBtn) nextRoundBtn.style.display = "none";
-}
-
-function showNextRoundButton() {
-  const makeBtn = document.getElementById("makeBtn");
-  const nextRoundBtn = document.getElementById("nextRoundBtn");
-  if (makeBtn) makeBtn.style.display = "none";
-  if (nextRoundBtn) nextRoundBtn.style.display = "inline-block";
-}
-
-function hideRoundActionButtons() {
-  const makeBtn = document.getElementById("makeBtn");
-  const nextRoundBtn = document.getElementById("nextRoundBtn");
-  if (makeBtn) makeBtn.style.display = "none";
-  if (nextRoundBtn) nextRoundBtn.style.display = "none";
-}
-
 function isCurrentRoundCompleted() {
   if (!currentMatches.length) return false;
   return currentMatches.every(match => match.finished);
-}
-
-function refreshRoundActionButtons() {
-  if (!isHost) {
-    hideRoundActionButtons();
-    return;
-  }
-
-  if (restoredCompletedRound && isCurrentRoundCompleted()) {
-    showNextRoundButton();
-    return;
-  }
-
-  if (isCurrentRoundCompleted()) {
-    showNextRoundButton();
-    return;
-  }
-
-  if (roundLocked && currentMatches.length > 0) {
-    hideRoundActionButtons();
-    return;
-  }
-
-  showMakeButton();
 }
 
 function setScoreButtonsDisabled(disabled) {
@@ -195,6 +170,32 @@ function setScoreButtonsDisabled(disabled) {
       btn.disabled = disabled;
     }
   });
+}
+
+function refreshRoundActionButtons() {
+  const makeBtn = document.getElementById("makeBtn");
+  const nextRoundBtn = document.getElementById("nextRoundBtn");
+
+  if (makeBtn) makeBtn.style.display = "none";
+  if (nextRoundBtn) nextRoundBtn.style.display = "none";
+
+  if (isHost) {
+    if (isCurrentRoundCompleted()) {
+      if (nextRoundBtn) nextRoundBtn.style.display = "inline-block";
+      return;
+    }
+
+    if (roundLocked && currentMatches.length > 0) {
+      return;
+    }
+
+    if (makeBtn) makeBtn.style.display = "inline-block";
+    return;
+  }
+
+  if (canManageNextRound() && isCurrentRoundCompleted()) {
+    if (nextRoundBtn) nextRoundBtn.style.display = "inline-block";
+  }
 }
 
 function addHistory(text) {
@@ -409,6 +410,7 @@ function resetLocalStateOnly() {
   editMode = false;
   restoredCompletedRound = false;
   restoredSnapshotIndex = -1;
+  nextRoundOwnerId = "";
 
   teamPairCount = {};
   opponentPairCount = {};
@@ -435,305 +437,6 @@ function resetLocalStateOnly() {
   closeScore();
   updatePenaltyList();
   refreshRoundActionButtons();
-}
-
-async function resetAll() {
-  if (!ensureHost("전체 초기화")) return;
-  if (!beginHostAction()) return;
-
-  try {
-    if (!currentRoomCode) {
-      alert("먼저 방에 연결해줘.");
-      return;
-    }
-    if (!confirm("현재 방 상태를 전체 초기화할까요?")) return;
-
-    resetLocalStateOnly();
-
-    const roomMeta = getRoomMetaState();
-    const roomPayload = {
-      round_no: 1,
-      round_locked: false,
-      waiting_players: [],
-      loss_state: {},
-      fixed_teams: [],
-      meta_state: roomMeta
-    };
-
-    markRoomReloadSuppressed(1200);
-    markMatchesReloadSuppressed(1800);
-
-    const { error: roomError } = await supabaseClient
-      .from("match_rooms")
-      .update(roomPayload)
-      .eq("room_code", currentRoomCode);
-
-    if (roomError) {
-      console.error(roomError);
-      alert("방 초기화 저장 실패");
-      return;
-    }
-
-    const { error: deleteError } = await supabaseClient
-      .from("match_round_matches")
-      .delete()
-      .eq("room_code", currentRoomCode);
-
-    if (deleteError) {
-      console.error(deleteError);
-      alert("경기 데이터 삭제 실패");
-      return;
-    }
-
-    alert("전체 초기화했어.");
-  } finally {
-    endHostAction();
-  }
-}
-
-async function addFixedTeam() {
-  if (!ensureHost("고정팀 추가")) return;
-  if (!beginHostAction()) return;
-
-  try {
-    const p1 = document.getElementById("fixed1").value.trim();
-    const p2 = document.getElementById("fixed2").value.trim();
-    const r = parseInt(document.getElementById("fixedRound").value, 10);
-
-    if (!p1 || !p2 || !r) {
-      alert("선수 2명과 라운드를 입력해줘.");
-      return;
-    }
-
-    if (p1 === p2) {
-      alert("같은 선수끼리는 고정팀 불가");
-      return;
-    }
-
-    fixedTeams.push({ p1, p2, round: r });
-    updateFixedList();
-    await saveRoomStateOnly();
-
-    document.getElementById("fixed1").value = "";
-    document.getElementById("fixed2").value = "";
-    document.getElementById("fixedRound").value = "";
-  } finally {
-    endHostAction();
-  }
-}
-
-async function removeFixedTeam(index) {
-  if (!ensureHost("고정팀 삭제")) return;
-  if (!beginHostAction()) return;
-
-  try {
-    fixedTeams.splice(index, 1);
-    updateFixedList();
-    await saveRoomStateOnly();
-  } finally {
-    endHostAction();
-  }
-}
-
-function updateFixedList() {
-  let html = "";
-
-  if (fixedTeams.length === 0) {
-    html = "설정된 고정팀 없음";
-  } else {
-    fixedTeams.forEach((f, idx) => {
-      html += `${f.round}R : ${f.p1} / ${f.p2}`;
-      if (isHost) {
-        html += ` <button onclick="removeFixedTeam(${idx})">삭제</button>`;
-      }
-      html += "<br>";
-    });
-  }
-
-  document.getElementById("fixedList").innerHTML = html;
-}
-
-function getRoundFixedTeam(activePlayers) {
-  const fixed = fixedTeams.find(f => f.round === round);
-  if (!fixed) return null;
-  if (!activePlayers.includes(fixed.p1) || !activePlayers.includes(fixed.p2)) return null;
-  return [fixed.p1, fixed.p2];
-}
-
-function chooseWaitingPlayers(activePlayers, waitingCount, fixedTeam) {
-  if (waitingCount <= 0) return [];
-
-  const candidates = combination(activePlayers, waitingCount);
-  let best = null;
-  let bestScore = Infinity;
-
-  for (const group of candidates) {
-    if (fixedTeam) {
-      if (group.includes(fixedTeam[0]) || group.includes(fixedTeam[1])) continue;
-    }
-
-    let score = 0;
-    for (const p of group) {
-      score += (restCount[p] || 0) * -30;
-      if ((lastRoundRest[p] || 0) === round - 1) score += 200;
-      if ((lastRoundPlayed[p] || 0) === round - 1) score += -10;
-      score += (playCount[p] || 0) * -3;
-    }
-
-    if (score < bestScore) {
-      bestScore = score;
-      best = group;
-    }
-  }
-
-  if (!best) {
-    const filtered = activePlayers.filter(p => !fixedTeam || !fixedTeam.includes(p));
-    shuffle(filtered);
-    best = filtered.slice(0, waitingCount);
-  }
-
-  return best;
-}
-
-function generatePairings(playersToPair, fixedTeam = null) {
-  const results = [];
-
-  function helper(remaining, currentTeams) {
-    if (remaining.length === 0) {
-      results.push(currentTeams.map(team => [...team]));
-      return;
-    }
-
-    const first = remaining[0];
-    for (let i = 1; i < remaining.length; i++) {
-      const second = remaining[i];
-      const team = [first, second];
-      const rest = remaining.filter((_, idx) => idx !== 0 && idx !== i);
-      helper(rest, [...currentTeams, team]);
-    }
-  }
-
-  if (fixedTeam) {
-    const remaining = playersToPair.filter(p => !fixedTeam.includes(p));
-    helper(remaining, [fixedTeam]);
-  } else {
-    helper(playersToPair, []);
-  }
-
-  return results;
-}
-
-function pairTeamsIntoMatches(teams) {
-  if (teams.length === 2) return [[[teams[0], teams[1]]]];
-
-  if (teams.length === 4) {
-    return [
-      [[teams[0], teams[1]], [teams[2], teams[3]]],
-      [[teams[0], teams[2]], [teams[1], teams[3]]],
-      [[teams[0], teams[3]], [teams[1], teams[2]]]
-    ];
-  }
-
-  return [];
-}
-
-function getTeamPenalty(team) {
-  const [a, b] = team;
-  const key = pairKey(a, b);
-  let penalty = 0;
-
-  penalty += (teamPairCount[key] || 0) * 100;
-  for (const recent of recentTeammates) {
-    if (recent === key) penalty += 50;
-  }
-
-  return penalty;
-}
-
-function getOpponentPenalty(teamA, teamB) {
-  let penalty = 0;
-
-  for (const a of teamA) {
-    for (const b of teamB) {
-      const key = pairKey(a, b);
-      penalty += (opponentPairCount[key] || 0) * 20;
-      for (const recent of recentOpponents) {
-        if (recent === key) penalty += 10;
-      }
-    }
-  }
-
-  return penalty;
-}
-
-function getBalancePenalty(playingPlayers, waitingPlayers) {
-  let penalty = 0;
-
-  for (const p of playingPlayers) {
-    penalty += (playCount[p] || 0) * 2;
-    if ((lastRoundPlayed[p] || 0) === round - 1) penalty += 2;
-  }
-
-  for (const p of waitingPlayers) {
-    penalty += (restCount[p] || 0) * -5;
-  }
-
-  return penalty;
-}
-
-function chooseBestSchedule(activePlayers) {
-  let matchCount = Math.floor(activePlayers.length / 4);
-  if (matchCount > 2) matchCount = 2;
-
-  const neededPlayers = matchCount * 4;
-  const waitingCount = activePlayers.length - neededPlayers;
-  const fixedTeam = getRoundFixedTeam(activePlayers);
-
-  const waitingPlayers = chooseWaitingPlayers(activePlayers, waitingCount, fixedTeam);
-  const playingPlayers = activePlayers.filter(p => !waitingPlayers.includes(p));
-
-  const allTeamCombos = generatePairings(playingPlayers, fixedTeam);
-  let bestPlan = null;
-  let bestScore = Infinity;
-
-  for (const teams of allTeamCombos) {
-    if (teams.length !== neededPlayers / 2) continue;
-
-    const matchSets = pairTeamsIntoMatches(teams);
-
-    for (const matchSet of matchSets) {
-      let score = 0;
-
-      for (const m of matchSet) {
-        const t1 = m[0];
-        const t2 = m[1];
-        score += getTeamPenalty(t1);
-        score += getTeamPenalty(t2);
-        score += getOpponentPenalty(t1, t2);
-      }
-
-      score += getBalancePenalty(playingPlayers, waitingPlayers);
-
-      if (score < bestScore) {
-        bestScore = score;
-        bestPlan = {
-          waitingPlayers: [...waitingPlayers],
-          matches: matchSet.map((m, idx) => ({
-            dbId: null,
-            matchIndex: idx,
-            teams: [[...m[0]], [...m[1]]],
-            finished: false,
-            scoreA: 0,
-            scoreB: 0,
-            scoreHistory: [],
-            winnerIndex: null
-          }))
-        };
-      }
-    }
-  }
-
-  return bestPlan;
 }
 
 function matchHTML(i, t1, t2) {
@@ -859,7 +562,8 @@ function getRoomMetaState() {
     resultCount,
     neededResults,
     restoredCompletedRound,
-    restoredSnapshotIndex
+    restoredSnapshotIndex,
+    nextRoundOwnerId
   };
 }
 
@@ -1194,7 +898,10 @@ async function addPenalty() {
 }
 
 async function makeMatch(skipHostBusyCheck = false) {
-  if (!ensureHost("대진 생성")) return;
+  if (!isHost) {
+    alert("대진 생성은 방장만 할 수 있어.");
+    return;
+  }
 
   if (!skipHostBusyCheck) {
     if (!beginHostAction()) return;
@@ -1217,23 +924,7 @@ async function makeMatch(skipHostBusyCheck = false) {
     if (roundLocked) {
       const finishedCount = currentMatches.filter(m => m.finished).length;
 
-      if (restoredCompletedRound) {
-        if (neededResults > 0 && finishedCount >= neededResults) {
-          saveRestoredCompletedRoundSnapshot();
-          roundSnapshots = roundSnapshots.slice(0, restoredSnapshotIndex + 1);
-
-          const savedSnapshot = roundSnapshots[restoredSnapshotIndex];
-          applyAfterCommitState(savedSnapshot.afterCommitState);
-
-          restoredCompletedRound = false;
-          restoredSnapshotIndex = -1;
-          roundLocked = false;
-          round++;
-        } else {
-          alert("현재 라운드가 아직 끝나지 않았어.");
-          return;
-        }
-      } else if (neededResults > 0 && finishedCount >= neededResults) {
+      if (neededResults > 0 && finishedCount >= neededResults) {
         roundLocked = false;
       } else {
         alert("현재 라운드가 아직 끝나지 않았어.");
@@ -1261,6 +952,7 @@ async function makeMatch(skipHostBusyCheck = false) {
     currentWaitingPlayers = plan.waitingPlayers;
     currentRoundPenalties = [];
     roundLocked = true;
+    nextRoundOwnerId = "";
     refreshRoundActionButtons();
 
     currentRoundHistoryLines = getHistorySeedForNewRound();
@@ -1279,57 +971,6 @@ async function makeMatch(skipHostBusyCheck = false) {
     if (!skipHostBusyCheck) {
       endHostAction();
     }
-  }
-}
-
-async function goNextRound() {
-  if (!ensureHost("다음 라운드 진행")) return;
-  if (!beginHostAction()) return;
-
-  try {
-    if (!isCurrentRoundCompleted()) {
-      alert("현재 라운드가 아직 끝나지 않았어.");
-      return;
-    }
-
-    const pendingIndexes = Object.keys(matchSaveTimers)
-      .filter(key => !!matchSaveTimers[key])
-      .map(Number);
-
-    for (const idx of pendingIndexes) {
-      await flushMatchSave(idx);
-    }
-
-    if (restoredCompletedRound) {
-      saveRestoredCompletedRoundSnapshot();
-      roundSnapshots = roundSnapshots.slice(0, restoredSnapshotIndex + 1);
-
-      const savedSnapshot = roundSnapshots[restoredSnapshotIndex];
-      applyAfterCommitState(savedSnapshot.afterCommitState);
-
-      restoredCompletedRound = false;
-      restoredSnapshotIndex = -1;
-      round = savedSnapshot.afterCommitState.round + 1;
-    }
-
-    currentMatches = [];
-    currentWaitingPlayers = [];
-    currentRoundPenalties = [];
-    resultCount = 0;
-    neededResults = 0;
-    roundLocked = false;
-
-    markMatchesReloadSuppressed(1600);
-    markRoomReloadSuppressed(900);
-
-    closeScore();
-    renderMatches();
-    updateScore();
-    refreshRoundActionButtons();
-
-    await makeMatch(true);
-  } finally {
-    endHostAction();
   }
 }
 
@@ -1436,6 +1077,12 @@ async function finishWinner() {
   closeScore();
 
   await flushMatchSave(currentScoreMatch);
+
+  const willCompleteRound = !wasFinished && resultCount >= neededResults;
+  if (willCompleteRound) {
+    nextRoundOwnerId = clientId;
+  }
+
   await saveRoomStateOnly();
 
   if (!editMode && !wasFinished) {
@@ -1529,9 +1176,8 @@ async function checkRoundEnd() {
 
   restoredCompletedRound = false;
   restoredSnapshotIndex = -1;
-  roundLocked = false;
-  round++;
   currentRoundPenalties = [];
+  roundLocked = false;
 
   renderMatches();
   updateScore();
@@ -1542,6 +1188,69 @@ async function checkRoundEnd() {
 
   if (players.filter(p => loss[p] < 3).length < 4) {
     document.getElementById("match").innerHTML += `<div><b>경기 종료</b></div>`;
+  }
+}
+
+async function goNextRound() {
+  if (!canManageNextRound()) {
+    alert("다음 라운드는 방장 또는 마지막 경기 종료자만 진행할 수 있어.");
+    return;
+  }
+
+  if (!beginHostAction()) return;
+
+  try {
+    if (!isCurrentRoundCompleted()) {
+      alert("현재 라운드가 아직 끝나지 않았어.");
+      return;
+    }
+
+    const pendingIndexes = Object.keys(matchSaveTimers)
+      .filter(key => !!matchSaveTimers[key])
+      .map(Number);
+
+    for (const idx of pendingIndexes) {
+      await flushMatchSave(idx);
+    }
+
+    if (restoredCompletedRound) {
+      saveRestoredCompletedRoundSnapshot();
+      roundSnapshots = roundSnapshots.slice(0, restoredSnapshotIndex + 1);
+
+      const savedSnapshot = roundSnapshots[restoredSnapshotIndex];
+      applyAfterCommitState(savedSnapshot.afterCommitState);
+
+      restoredCompletedRound = false;
+      restoredSnapshotIndex = -1;
+      round = savedSnapshot.afterCommitState.round + 1;
+    } else {
+      round++;
+    }
+
+    currentMatches = [];
+    currentWaitingPlayers = [];
+    currentRoundPenalties = [];
+    resultCount = 0;
+    neededResults = 0;
+    roundLocked = false;
+    nextRoundOwnerId = "";
+
+    markMatchesReloadSuppressed(1600);
+    markRoomReloadSuppressed(900);
+
+    closeScore();
+    renderMatches();
+    updateScore();
+    refreshRoundActionButtons();
+
+    // 실제 새 대진 생성은 방장이 담당
+    if (isHost) {
+      await makeMatch(true);
+    } else {
+      await saveRoomStateOnly();
+    }
+  } finally {
+    endHostAction();
   }
 }
 
@@ -1602,7 +1311,7 @@ async function undoRound() {
     editMode = false;
     roundLocked = true;
     restoredCompletedRound = true;
-    refreshRoundActionButtons();
+    nextRoundOwnerId = "";
 
     renderHistory();
     renderMatches();
@@ -1742,6 +1451,7 @@ async function loadRoomStateFromServer() {
   neededResults = meta.neededResults || 0;
   restoredCompletedRound = !!meta.restoredCompletedRound;
   restoredSnapshotIndex = typeof meta.restoredSnapshotIndex === "number" ? meta.restoredSnapshotIndex : -1;
+  nextRoundOwnerId = meta.nextRoundOwnerId || "";
 
   currentMatches = (matches || []).map((m, idx) => {
     const local = previousLocalMatches[idx];
@@ -2046,6 +1756,7 @@ function setupPlayerSync() {
 }
 
 window.addEventListener("load", async () => {
+  clientId = getOrCreateClientId();
   initSupabase();
   setupPlayerSync();
 

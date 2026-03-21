@@ -130,6 +130,10 @@
       padding: 4px 10px;
       margin-bottom: 8px;
     }
+
+    #nextRoundBtn {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -172,10 +176,16 @@
   <div class="section-box hostOnly">
     <div class="controls">
       <button id="makeBtn" onclick="makeMatch()">대진 생성</button>
-      <button id="nextRoundBtn" onclick="goNextRound()" style="display:none;">다음 라운드</button>
       <button onclick="undoRound()">이전 완료 라운드로 복구</button>
       <button onclick="resetAll()">전체 초기화</button>
     </div>
+  </div>
+
+  <div class="section-box">
+    <div class="controls">
+      <button id="nextRoundBtn" onclick="goNextRound()">다음 라운드</button>
+    </div>
+    <div class="small">모든 경기가 끝난 뒤, 방장 또는 마지막 경기 종료자가 다음 라운드를 진행할 수 있어.</div>
   </div>
 
   <div class="section-box hostOnly">
