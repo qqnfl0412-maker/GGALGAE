@@ -17,15 +17,12 @@ let editMode = false;
 let restoredCompletedRound = false;
 let restoredSnapshotIndex = -1;
 
-// 참가자 전용 다음 라운드 표시 권한
 let participantCanSeeNextRound = false;
 
-// 다음 라운드 요청 동기화
 let nextRoundRequestId = "";
 let nextRoundRequestedRound = 0;
 let lastHandledNextRoundRequestId = "";
 
-// 통계
 let teamPairCount = {};
 let opponentPairCount = {};
 let playCount = {};
@@ -35,10 +32,8 @@ let lastRoundRest = {};
 let recentTeammates = [];
 let recentOpponents = [];
 
-// 완료 라운드 스냅샷
 let roundSnapshots = [];
 
-// 서버 관련
 let supabaseClient = null;
 let currentRoomCode = "";
 let currentHostCode = "";
@@ -47,7 +42,6 @@ let roomChannel = null;
 let matchesChannel = null;
 let isApplyingRemoteState = false;
 
-// 저장/반영 안정화
 let matchSaveTimers = {};
 let suppressRoomReloadUntil = 0;
 let suppressMatchesReloadUntil = 0;
@@ -56,10 +50,9 @@ let scoreButtonsLocked = false;
 let scoreInputBusy = false;
 let hostActionBusy = false;
 
-// UI
 let currentPage = "home";
+let scoreLandscapeMode = false;
 
-// Supabase 정보
 const SUPABASE_URL = "https://crzulknhwcvhepajsxnl.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyenVsa25od2N2aGVwYWpzeG5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MTY5MjQsImV4cCI6MjA4OTA5MjkyNH0.EwbPzEZ4LQMrHxDLEz0MElsAdPj2k9DPXFl_2Kczbyw";
 
@@ -152,10 +145,7 @@ function isCurrentRoundCompleted() {
 
 function setScoreButtonsDisabled(disabled) {
   scoreButtonsLocked = disabled;
-  const scoreboard = document.getElementById("scoreboard");
-  if (!scoreboard) return;
-  const buttons = scoreboard.querySelectorAll("button");
-  buttons.forEach(btn => {
+  document.querySelectorAll("#page-score button").forEach(btn => {
     const text = (btn.textContent || "").trim();
     if (text === "+1" || text === "점수 되돌리기" || text === "경기 종료") {
       btn.disabled = disabled;
@@ -413,7 +403,7 @@ function updateFloatingRoomStatus() {
 
   if (!wrap || !text || !dot) return;
 
-  if (currentPage === "home") {
+  if (currentPage === "home" || scoreLandscapeMode) {
     wrap.classList.remove("show");
     return;
   }
@@ -464,10 +454,6 @@ function renderScoreMatchList() {
   el.innerHTML = html;
 }
 
-function openScoreFromScorePage(i) {
-  openScore(i);
-}
-
 function showSplashThenApp() {
   const splash = document.getElementById("splashScreen");
   if (!splash) return;
@@ -480,8 +466,58 @@ function showSplashThenApp() {
   }, 1200);
 }
 
+async function enterScoreLandscapeMode() {
+  scoreLandscapeMode = true;
+  document.body.classList.add("score-landscape");
+  updateFloatingRoomStatus();
+
+  try {
+    if (screen.orientation && screen.orientation.lock) {
+      await screen.orientation.lock("landscape");
+    }
+  } catch (e) {
+    console.log("가로 회전 잠금은 브라우저/기기에서 지원되지 않음", e);
+  }
+}
+
+async function leaveScoreLandscapeMode() {
+  scoreLandscapeMode = false;
+  document.body.classList.remove("score-landscape");
+  updateFloatingRoomStatus();
+
+  try {
+    if (screen.orientation && screen.orientation.unlock) {
+      screen.orientation.unlock();
+    }
+  } catch (e) {
+    console.log("회전 잠금 해제 미지원", e);
+  }
+}
+
+function clearSelectedMatch() {
+  currentScoreMatch = -1;
+  editMode = false;
+  document.getElementById("scoreRoundLabel").innerText = "경기를 선택해줘";
+  document.getElementById("editModeLabel").innerText = "";
+  document.getElementById("teamA").innerText = "팀 A";
+  document.getElementById("teamB").innerText = "팀 B";
+  document.getElementById("scoreA").innerText = "0";
+  document.getElementById("scoreB").innerText = "0";
+  document.getElementById("courtNotice").innerText = "";
+}
+
+function openScoreFromScorePage(i) {
+  goPage("score");
+  openScore(i);
+}
+
 function goPage(name) {
+  const prevPage = currentPage;
   currentPage = name;
+
+  if (prevPage === "score" && name !== "score") {
+    leaveScoreLandscapeMode();
+  }
 
   document.querySelectorAll(".page").forEach(el => {
     el.classList.remove("active");
@@ -494,6 +530,10 @@ function goPage(name) {
     btn.classList.remove("active");
     if (btn.dataset.page === name) btn.classList.add("active");
   });
+
+  if (name === "score") {
+    enterScoreLandscapeMode();
+  }
 
   updateFloatingRoomStatus();
   renderScoreMatchList();
@@ -552,13 +592,13 @@ function resetLocalStateOnly() {
   if (waitingEl) waitingEl.innerText = "없음";
 
   renderHistory();
-  closeScore();
   updatePenaltyList();
   refreshRoundActionButtons();
   updateCurrentRoundLabel();
   updatePlayersPreview();
   renderScoreMatchList();
   updateFloatingRoomStatus();
+  clearSelectedMatch();
 }
 
 async function resetAll() {
@@ -869,7 +909,7 @@ function matchHTML(i, t1, t2) {
   const scoreText = match ? `${match.scoreA} : ${match.scoreB}` : "0 : 0";
 
   return `
-    <div class="match" id="matchBox${i}" onclick="openScore(${i})">
+    <div class="match" id="matchBox${i}" onclick="openScoreFromScorePage(${i})">
       <div class="courtBadge">${courtLabel}</div>
       <b>${t1.join(" / ")} VS ${t2.join(" / ")}</b>
       <div class="small">현재 점수: ${scoreText}</div>
@@ -964,20 +1004,7 @@ function openScore(i) {
   document.getElementById("teamB").innerText = match.teams[1].join(" / ");
 
   updateScoreBoard();
-  document.getElementById("scoreboard").style.display = "block";
   setScoreButtonsDisabled(false);
-}
-
-function closeScore() {
-  const board = document.getElementById("scoreboard");
-  if (board) board.style.display = "none";
-  const editLabel = document.getElementById("editModeLabel");
-  if (editLabel) editLabel.innerText = "";
-  setScoreButtonsDisabled(false);
-}
-
-function cancelMatch() {
-  closeScore();
 }
 
 function getRoomMetaState() {
@@ -1480,10 +1507,10 @@ async function goNextRound() {
     markMatchesReloadSuppressed(1600);
     markRoomReloadSuppressed(900);
 
-    closeScore();
     renderMatches();
     updateScore();
     refreshRoundActionButtons();
+    clearSelectedMatch();
 
     await saveRoomStateOnly();
     await makeMatch(true);
@@ -1493,7 +1520,10 @@ async function goNextRound() {
 }
 
 async function addScore(team) {
-  if (currentScoreMatch < 0 || !currentMatches[currentScoreMatch]) return;
+  if (currentScoreMatch < 0 || !currentMatches[currentScoreMatch]) {
+    alert("먼저 경기를 선택해줘.");
+    return;
+  }
   if (scoreButtonsLocked || scoreInputBusy) return;
 
   brieflyLockScoreInput();
@@ -1595,7 +1625,6 @@ async function finishWinner() {
   rebuildRoundState();
   updateScore();
   renderScoreMatchList();
-  closeScore();
 
   await flushMatchSave(currentScoreMatch);
   await saveRoomStateOnly();
@@ -1604,7 +1633,6 @@ async function finishWinner() {
     alert("🏸 승리 팀\n" + match.teams[actualWinnerIndex].join(" / "));
   }
 
-  currentScoreMatch = -1;
   editMode = false;
 
   if (restoredCompletedRound) {
@@ -1778,7 +1806,7 @@ async function undoRound() {
     renderHistory();
     renderMatches();
     updateScore();
-    closeScore();
+    clearSelectedMatch();
 
     markMatchesReloadSuppressed(1600);
 
@@ -1983,18 +2011,15 @@ async function loadRoomStateFromServer() {
 
   refreshRoundActionButtons();
 
-  const modal = document.getElementById("scoreboard");
   if (
     currentScoreMatch >= 0 &&
-    currentMatches[currentScoreMatch] &&
-    modal &&
-    modal.style.display === "block"
+    currentMatches[currentScoreMatch]
   ) {
     document.getElementById("scoreRoundLabel").innerText = `Round ${round} / 경기 ${currentScoreMatch + 1}`;
     document.getElementById("editModeLabel").innerText = currentMatches[currentScoreMatch].finished ? "수정 모드" : "";
     updateScoreBoard();
   } else {
-    closeScore();
+    clearSelectedMatch();
   }
 
   setSyncStatus("실시간 연결 중");
@@ -2267,6 +2292,7 @@ window.addEventListener("load", async () => {
   renderScoreMatchList();
   updateFloatingRoomStatus();
   updateHostOnlyUI();
+  clearSelectedMatch();
 
   const url = new URL(window.location.href);
   const roomParam = (url.searchParams.get("room") || "").toUpperCase();

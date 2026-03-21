@@ -53,7 +53,7 @@
 
     .content {
       flex: 1;
-      padding: 14px 14px 92px;
+      padding: 14px 14px 120px;
     }
 
     .page {
@@ -76,13 +76,6 @@
     .card h3 {
       margin: 0 0 12px;
       font-size: 17px;
-    }
-
-    .section-title {
-      font-size: 14px;
-      font-weight: 700;
-      margin-bottom: 10px;
-      color: #374151;
     }
 
     input, select {
@@ -226,9 +219,10 @@
 
     .floating-room-status {
       position: fixed;
-      right: 12px;
-      bottom: 82px;
-      z-index: 60;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 74px;
+      z-index: 65;
       display: none;
       align-items: center;
       gap: 8px;
@@ -239,6 +233,9 @@
       box-shadow: 0 8px 20px rgba(0,0,0,0.18);
       font-size: 12px;
       font-weight: 700;
+      width: calc(100% - 24px);
+      max-width: 456px;
+      justify-content: center;
     }
 
     .floating-room-status.show {
@@ -290,47 +287,6 @@
       background: #eef2ff;
       color: #1d4ed8;
       font-weight: 800;
-    }
-
-    #scoreboard {
-      display: none;
-      position: fixed;
-      left: 12px;
-      right: 12px;
-      top: 50%;
-      transform: translateY(-50%);
-      z-index: 999;
-      background: white;
-      border-radius: 20px;
-      border: 2px solid #111827;
-      padding: 18px;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.22);
-      max-width: 456px;
-      margin: 0 auto;
-    }
-
-    #scoreA, #scoreB {
-      font-size: 48px;
-      font-weight: 900;
-      display: inline-block;
-      min-width: 48px;
-      text-align: center;
-      margin-left: 10px;
-    }
-
-    .score-team-box {
-      padding: 12px;
-      border-radius: 14px;
-      background: #f8fafc;
-      border: 1px solid #e5e7eb;
-      margin-bottom: 12px;
-    }
-
-    .score-actions-bottom {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 8px;
-      margin-top: 14px;
     }
 
     .history-box {
@@ -387,6 +343,119 @@
       display: none !important;
     }
 
+    .score-full-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .score-mode-box {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #eef2ff;
+      color: #1d4ed8;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .scoreboard-page-wrap {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .score-teams-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .score-team-box {
+      padding: 14px;
+      border-radius: 16px;
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+    }
+
+    .score-team-title {
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 12px;
+    }
+
+    .score-number-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      justify-content: center;
+    }
+
+    .score-number {
+      font-size: 64px;
+      font-weight: 900;
+      min-width: 80px;
+      text-align: center;
+    }
+
+    .score-controls-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+
+    .score-match-picker .match {
+      margin-bottom: 8px;
+    }
+
+    .rotate-hint {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 8px;
+    }
+
+    body.score-landscape {
+      max-width: 100vw;
+    }
+
+    body.score-landscape .topbar,
+    body.score-landscape .bottom-nav,
+    body.score-landscape .floating-room-status {
+      display: none !important;
+    }
+
+    body.score-landscape .content {
+      padding: 10px 10px 12px;
+    }
+
+    body.score-landscape #page-score.active {
+      display: block;
+      min-height: 100vh;
+    }
+
+    body.score-landscape #page-score .card {
+      border-radius: 16px;
+      margin-bottom: 10px;
+    }
+
+    body.score-landscape .scoreboard-page-wrap {
+      grid-template-columns: 1.05fr 1.2fr;
+      align-items: start;
+    }
+
+    body.score-landscape .score-teams-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    body.score-landscape .score-team-title {
+      font-size: 18px;
+    }
+
+    body.score-landscape .score-number {
+      font-size: 72px;
+    }
+
     @media (max-width: 420px) {
       .player-grid {
         grid-template-columns: repeat(2, 1fr);
@@ -395,6 +464,10 @@
       .bottom-nav {
         grid-template-columns: repeat(3, 1fr);
         row-gap: 4px;
+      }
+
+      .floating-room-status {
+        bottom: 132px;
       }
     }
   </style>
@@ -413,7 +486,6 @@
     </header>
 
     <main class="content">
-      <!-- 홈 -->
       <section id="page-home" class="page active">
         <div class="card">
           <h3>방 연결</h3>
@@ -438,7 +510,6 @@
         </div>
       </section>
 
-      <!-- 참가자 관리 -->
       <section id="page-players" class="page">
         <div class="card">
           <h3>참가자 관리</h3>
@@ -461,7 +532,6 @@
         </div>
       </section>
 
-      <!-- 라운드 진행 -->
       <section id="page-round" class="page">
         <div class="card">
           <h3>라운드 진행</h3>
@@ -489,22 +559,67 @@
         </div>
       </section>
 
-      <!-- 점수판 -->
       <section id="page-score" class="page">
         <div class="card">
-          <h3>점수판</h3>
-          <div class="small">
-            경기 목록에서 선택해 점수를 입력해.
+          <div class="score-full-header">
+            <h3 style="margin:0;">점수판</h3>
+            <button class="secondary" onclick="leaveScoreLandscapeMode()">세로 보기</button>
+          </div>
+          <div class="rotate-hint">
+            점수판 페이지는 가로형 화면으로 표시돼. 지원되는 기기에서는 자동 회전을 시도해.
           </div>
         </div>
 
-        <div class="card">
-          <h3>현재 경기 선택</h3>
-          <div id="scoreMatchList"></div>
+        <div class="scoreboard-page-wrap">
+          <div>
+            <div class="card">
+              <h3>경기 선택</h3>
+              <div id="scoreMatchList" class="score-match-picker"></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="card">
+              <div class="score-full-header">
+                <div>
+                  <h3 id="scoreRoundLabel" style="margin:0;">경기를 선택해줘</h3>
+                </div>
+                <div id="editModeLabel" class="score-mode-box"></div>
+              </div>
+
+              <div class="scoreboard-page-wrap-inner">
+                <div class="score-teams-grid">
+                  <div class="score-team-box">
+                    <div id="teamA" class="score-team-title">팀 A</div>
+                    <div class="score-number-row">
+                      <button onclick="addScore(0)">+1</button>
+                      <div id="scoreA" class="score-number">0</div>
+                    </div>
+                  </div>
+
+                  <div class="score-team-box">
+                    <div id="teamB" class="score-team-title">팀 B</div>
+                    <div class="score-number-row">
+                      <button onclick="addScore(1)">+1</button>
+                      <div id="scoreB" class="score-number">0</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card" style="margin-top:12px; margin-bottom:0;">
+                  <div id="courtNotice" class="danger" style="margin-bottom:10px;"></div>
+                  <div class="score-controls-grid">
+                    <button class="gray" onclick="undoScore()">점수 되돌리기</button>
+                    <button onclick="finishGame()">경기 종료</button>
+                    <button class="secondary" onclick="clearSelectedMatch()">선택 해제</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
-      <!-- 기록 -->
       <section id="page-history" class="page">
         <div class="card">
           <h3>패배 / 출전 / 대기 기록</h3>
@@ -517,7 +632,6 @@
         </div>
       </section>
 
-      <!-- 설정 -->
       <section id="page-settings" class="page">
         <div class="card hostOnly">
           <h3>고정 팀 설정 <span class="room-badge">방장 전용</span></h3>
@@ -562,35 +676,6 @@
       <button class="nav-btn" data-page="history" onclick="goPage('history')">기록</button>
       <button class="nav-btn" data-page="settings" onclick="goPage('settings')">설정</button>
     </nav>
-  </div>
-
-  <div id="scoreboard">
-    <h3 id="scoreRoundLabel"></h3>
-    <div id="editModeLabel" class="editText"></div>
-
-    <div class="score-team-box">
-      <h3 id="teamA"></h3>
-      <div>
-        <button onclick="addScore(0)">+1</button>
-        <span id="scoreA">0</span>
-      </div>
-    </div>
-
-    <div class="score-team-box">
-      <h3 id="teamB"></h3>
-      <div>
-        <button onclick="addScore(1)">+1</button>
-        <span id="scoreB">0</span>
-      </div>
-    </div>
-
-    <div id="courtNotice" class="danger"></div>
-
-    <div class="score-actions-bottom">
-      <button class="gray" onclick="undoScore()">점수 되돌리기</button>
-      <button onclick="finishGame()">경기 종료</button>
-      <button class="secondary" onclick="cancelMatch()">닫기</button>
-    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
