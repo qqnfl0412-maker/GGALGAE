@@ -50,7 +50,7 @@ let hostActionBusy = false;
 
 // Supabase 정보
 const SUPABASE_URL = "https://crzulknhwcvhepajsxnl.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyenVsa25od2N2aGVwYWpzeG5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MTY5MjQsImV4cCI6MjA4OTA5MjkyNH0.EwbPzEZ4LQMrHxDLEz0MElsAdPj2k9DPXFl_2Kczbyw";
+const SUPABASE_ANON_KEY = "여기에_정확한_anon_public_key_넣기";
 
 function pairKey(a, b) {
   return [a, b].sort().join("|");
@@ -212,31 +212,103 @@ function renderHistory() {
   historyEl.innerHTML = currentRoundHistoryLines.join("<br>") + "<br>";
 }
 
+function parseHistorySections(lines) {
+  const sections = {};
+  let currentRoundNo = null;
+
+  for (const line of lines || []) {
+    const headerMatch = line.match(/^===== Round (\d+) =====$/);
+    if (headerMatch) {
+      currentRoundNo = Number(headerMatch[1]);
+      if (!sections[currentRoundNo]) sections[currentRoundNo] = [];
+      sections[currentRoundNo].push(line);
+      continue;
+    }
+
+    if (currentRoundNo !== null) {
+      if (!sections[currentRoundNo]) sections[currentRoundNo] = [];
+      sections[currentRoundNo].push(line);
+    }
+  }
+
+  return sections;
+}
+
+function flattenHistorySections(sections) {
+  return Object.keys(sections)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .flatMap(r => sections[r]);
+}
+
+function getHistoryLinesBeforeRound(lines, roundNo) {
+  const sections = parseHistorySections(lines);
+  const filtered = {};
+
+  Object.keys(sections).forEach(key => {
+    const r = Number(key);
+    if (r < roundNo) filtered[r] = sections[r];
+  });
+
+  return flattenHistorySections(filtered);
+}
+
+function buildRoundSection(roundNo, waitingPlayers, penalties, matches) {
+  const section = [];
+  section.push(`===== Round ${roundNo} =====`);
+
+  if (waitingPlayers && waitingPlayers.length) {
+    section.push(`대기 : ${waitingPlayers.join(" / ")}`);
+  }
+
+  (penalties || []).forEach(p => {
+    section.push(`[Round ${roundNo}] ${p} 핸디캡 패 +1`);
+  });
+
+  (matches || []).forEach(match => {
+    if (!match.finished || match.winnerIndex === null) return;
+
+    const teamA = match.teams[0].join("/");
+    const teamB = match.teams[1].join("/");
+    const winnerText = match.winnerIndex === 0 ? `${teamA} 승` : `${teamB} 승`;
+
+    section.push(
+      `[Round ${roundNo}] ${teamA} ${match.scoreA} : ${match.scoreB} ${teamB} (${winnerText})`
+    );
+  });
+
+  return section;
+}
+
 function getCurrentHistoryLines() {
   return deepCopy(currentRoundHistoryLines);
 }
 
 function getBaseHistoryBeforeCurrentRound() {
+  let base = [];
+
   if (restoredCompletedRound) {
-    if (restoredSnapshotIndex <= 0) return [];
-    return deepCopy(roundSnapshots[restoredSnapshotIndex - 1].afterCommitState.historyLines || []);
+    if (restoredSnapshotIndex > 0) {
+      base = deepCopy(roundSnapshots[restoredSnapshotIndex - 1].afterCommitState.historyLines || []);
+    }
+  } else if (roundSnapshots.length > 0) {
+    base = deepCopy(roundSnapshots[roundSnapshots.length - 1].afterCommitState.historyLines || []);
   }
 
-  if (roundSnapshots.length === 0) return [];
-  return deepCopy(roundSnapshots[roundSnapshots.length - 1].afterCommitState.historyLines || []);
+  return getHistoryLinesBeforeRound(base, round);
 }
 
 function getHistorySeedForNewRound() {
+  let seed = [];
+
   if (restoredCompletedRound && restoredSnapshotIndex >= 0) {
     const snap = roundSnapshots[restoredSnapshotIndex];
-    return deepCopy(snap?.afterCommitState?.historyLines || []);
+    seed = deepCopy(snap?.afterCommitState?.historyLines || []);
+  } else if (roundSnapshots.length > 0) {
+    seed = deepCopy(roundSnapshots[roundSnapshots.length - 1].afterCommitState?.historyLines || []);
   }
 
-  if (roundSnapshots.length > 0) {
-    return deepCopy(roundSnapshots[roundSnapshots.length - 1].afterCommitState?.historyLines || []);
-  }
-
-  return [];
+  return getHistoryLinesBeforeRound(seed, round);
 }
 
 function updatePenaltyList() {
@@ -1061,54 +1133,32 @@ function rebuildRoundState() {
     });
   }
 
-  let historyLines = getBaseHistoryBeforeCurrentRound();
-
-  const roundHeader = `===== Round ${round} =====`;
-  if (!historyLines.includes(roundHeader)) {
-    historyLines.push(roundHeader);
-  }
-
-  if (currentWaitingPlayers.length) {
-    historyLines = historyLines.filter(line => !line.startsWith("대기 : "));
-    historyLines.push(`대기 : ${currentWaitingPlayers.join(" / ")}`);
-  }
-
   currentRoundPenalties.forEach(p => {
     if (!(p in baseLoss)) baseLoss[p] = 0;
     baseLoss[p]++;
-
-    const penaltyText = `[Round ${round}] ${p} 핸디캡 패 +1`;
-    if (!historyLines.includes(penaltyText)) {
-      historyLines.push(penaltyText);
-    }
   });
 
   currentMatches.forEach(match => {
     if (match.finished && match.winnerIndex !== null) {
       const loserTeam = match.teams[match.winnerIndex === 0 ? 1 : 0];
-
       loserTeam.forEach(p => {
         if (!(p in baseLoss)) baseLoss[p] = 0;
         baseLoss[p]++;
       });
-
-      const teamA = match.teams[0].join("/");
-      const teamB = match.teams[1].join("/");
-      const winnerText = match.winnerIndex === 0 ? `${teamA} 승` : `${teamB} 승`;
-
-      const matchText =
-        `[Round ${round}] ${teamA} ${match.scoreA} : ${match.scoreB} ${teamB} (${winnerText})`;
-
-      historyLines = historyLines.filter(line => {
-        if (!line.startsWith(`[Round ${round}] `)) return true;
-        if (line.includes("핸디캡 패 +1")) return true;
-        if (line === roundHeader) return true;
-        return !(line.includes(teamA) && line.includes(teamB));
-      });
-
-      historyLines.push(matchText);
     }
   });
+
+  let historySeed = getBaseHistoryBeforeCurrentRound();
+  historySeed = getHistoryLinesBeforeRound(historySeed, round);
+
+  const currentRoundSection = buildRoundSection(
+    round,
+    currentWaitingPlayers,
+    currentRoundPenalties,
+    currentMatches
+  );
+
+  const historyLines = [...historySeed, ...currentRoundSection];
 
   loss = baseLoss;
   currentRoundHistoryLines = historyLines;
@@ -1572,51 +1622,47 @@ async function undoRound() {
 }
 
 function buildHistoryFromServerState(room, matches) {
-  let lines = [];
-
   const meta = room.meta_state || {};
   const snaps = deepCopy(meta.roundSnapshots || []);
+
+  let seed = [];
+
+  if (room.round_locked) {
+    if (meta.restoredCompletedRound && meta.restoredSnapshotIndex > 0) {
+      seed = deepCopy(
+        snaps[meta.restoredSnapshotIndex - 1]?.afterCommitState?.historyLines || []
+      );
+    } else if (snaps.length > 0) {
+      seed = deepCopy(snaps[snaps.length - 1]?.afterCommitState?.historyLines || []);
+    }
+
+    seed = getHistoryLinesBeforeRound(seed, room.round_no);
+
+    const currentRoundMatches = (matches || []).map((m, idx) => ({
+      matchIndex: idx,
+      teams: [deepCopy(m.team_a || []), deepCopy(m.team_b || [])],
+      finished: !!m.finished,
+      scoreA: m.score_a || 0,
+      scoreB: m.score_b || 0,
+      winnerIndex: typeof m.winner_index === "number" ? m.winner_index : null
+    }));
+
+    return [
+      ...seed,
+      ...buildRoundSection(
+        room.round_no,
+        room.waiting_players || [],
+        meta.currentRoundPenalties || [],
+        currentRoundMatches
+      )
+    ];
+  }
+
   if (snaps.length > 0) {
-    lines = deepCopy(snaps[snaps.length - 1].afterCommitState?.historyLines || []);
+    return deepCopy(snaps[snaps.length - 1]?.afterCommitState?.historyLines || []);
   }
 
-  if (matches.length) {
-    const roundHeader = `===== Round ${room.round_no} =====`;
-    if (!lines.includes(roundHeader)) {
-      lines.push(roundHeader);
-    }
-
-    if ((room.waiting_players || []).length) {
-      const waitText = `대기 : ${(room.waiting_players || []).join(" / ")}`;
-      if (!lines.includes(waitText)) {
-        lines.push(waitText);
-      }
-    }
-
-    const penalties = meta.currentRoundPenalties || [];
-    penalties.forEach(p => {
-      const penaltyText = `[Round ${room.round_no}] ${p} 핸디캡 패 +1`;
-      if (!lines.includes(penaltyText)) {
-        lines.push(penaltyText);
-      }
-    });
-
-    matches.forEach(m => {
-      if (m.finished && typeof m.winner_index === "number") {
-        const teamA = (m.team_a || []).join("/");
-        const teamB = (m.team_b || []).join("/");
-        const winnerText = m.winner_index === 0 ? `${teamA} 승` : `${teamB} 승`;
-        const matchText =
-          `[Round ${room.round_no}] ${teamA} ${m.score_a} : ${m.score_b} ${teamB} (${winnerText})`;
-
-        if (!lines.includes(matchText)) {
-          lines.push(matchText);
-        }
-      }
-    });
-  }
-
-  return lines;
+  return [];
 }
 
 function shouldKeepLocalMatch(local, serverRow, idx) {
@@ -1855,8 +1901,8 @@ async function createRoom() {
     const { error } = await supabaseClient.from("match_rooms").insert(roomPayload);
 
     if (error) {
-      console.error(error);
-      alert("방 생성 실패");
+      console.error("방 생성 실패 상세:", error);
+      alert("방 생성 실패: " + (error.message || "알 수 없는 오류"));
       return;
     }
 
@@ -1902,10 +1948,10 @@ async function joinRoom() {
     .maybeSingle();
 
   if (error || !data) {
-  console.error("방 조회 실패:", error, data);
-  alert("방을 찾지 못했어.");
-  return;
-}
+    console.error("방 조회 실패:", error, data);
+    alert("방을 찾지 못했어.");
+    return;
+  }
 
   currentRoomCode = roomCode;
 
