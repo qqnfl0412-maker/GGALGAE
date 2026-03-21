@@ -50,7 +50,7 @@ let hostActionBusy = false;
 
 // Supabase 정보
 const SUPABASE_URL = "https://crzulknhwcvhepajsxnl.supabase.co";
-const SUPABASE_ANON_KEY = "여기에_정확한_anon_public_key_넣기";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyenVsa25od2N2aGVwYWpzeG5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MTY5MjQsImV4cCI6MjA4OTA5MjkyNH0.EwbPzEZ4LQMrHxDLEz0MElsAdPj2k9DPXFl_2Kczbyw";
 
 function pairKey(a, b) {
   return [a, b].sort().join("|");
