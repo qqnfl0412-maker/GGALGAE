@@ -20,6 +20,11 @@ let restoredSnapshotIndex = -1;
 // 참가자 전용 다음 라운드 표시 권한
 let participantCanSeeNextRound = false;
 
+// 다음 라운드 요청 동기화
+let nextRoundRequestId = "";
+let nextRoundRequestedRound = 0;
+let lastHandledNextRoundRequestId = "";
+
 // 통계
 let teamPairCount = {};
 let opponentPairCount = {};
@@ -53,7 +58,7 @@ let hostActionBusy = false;
 
 // Supabase 정보
 const SUPABASE_URL = "https://crzulknhwcvhepajsxnl.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyenVsa25od2N2aGVwYWpzeG5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MTY5MjQsImV4cCI6MjA4OTA5MjkyNH0.EwbPzEZ4LQMrHxDLEz0MElsAdPj2k9DPXFl_2Kczbyw";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2NyenVsa25od2N2aGVwYWpzeG5sLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc3MzUxNjkyNCwiZXhwIjoyMDg5MDkyOTI0fQ.EwbPzEZ4LQMrHxDLEz0MElsAdPj2k9DPXFl_2Kczbyw";
 
 function pairKey(a, b) {
   return [a, b].sort().join("|");
@@ -394,6 +399,10 @@ function resetLocalStateOnly() {
   restoredCompletedRound = false;
   restoredSnapshotIndex = -1;
   participantCanSeeNextRound = false;
+
+  nextRoundRequestId = "";
+  nextRoundRequestedRound = 0;
+  lastHandledNextRoundRequestId = "";
 
   teamPairCount = {};
   opponentPairCount = {};
@@ -844,7 +853,9 @@ function getRoomMetaState() {
     resultCount,
     neededResults,
     restoredCompletedRound,
-    restoredSnapshotIndex
+    restoredSnapshotIndex,
+    nextRoundRequestId,
+    nextRoundRequestedRound
   };
 }
 
@@ -1231,6 +1242,8 @@ async function makeMatch(skipHostBusyCheck = false) {
     currentRoundPenalties = [];
     roundLocked = true;
     participantCanSeeNextRound = false;
+    nextRoundRequestId = "";
+    nextRoundRequestedRound = 0;
     refreshRoundActionButtons();
 
     currentRoundHistoryLines = getHistorySeedForNewRound();
@@ -1252,11 +1265,34 @@ async function makeMatch(skipHostBusyCheck = false) {
   }
 }
 
-async function goNextRound() {
-  const canProceed = isHost || participantCanSeeNextRound;
+async function requestNextRoundFromParticipant() {
+  if (!supabaseClient || !currentRoomCode) {
+    alert("방 연결이 필요해.");
+    return;
+  }
 
-  if (!canProceed) {
-    alert("다음 라운드는 방장 또는 마지막 경기 종료자만 진행할 수 있어.");
+  if (!participantCanSeeNextRound || !isCurrentRoundCompleted()) {
+    alert("지금은 다음 라운드를 요청할 수 없어.");
+    return;
+  }
+
+  nextRoundRequestId = `REQ-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  nextRoundRequestedRound = round;
+  participantCanSeeNextRound = false;
+  refreshRoundActionButtons();
+
+  await saveRoomStateOnly();
+  alert("다음 라운드 요청을 보냈어.");
+}
+
+async function goNextRound() {
+  if (!isHost) {
+    await requestNextRoundFromParticipant();
+    return;
+  }
+
+  if (!isCurrentRoundCompleted()) {
+    alert("현재 라운드가 아직 끝나지 않았어.");
     return;
   }
 
@@ -1265,11 +1301,6 @@ async function goNextRound() {
   participantCanSeeNextRound = false;
 
   try {
-    if (!isCurrentRoundCompleted()) {
-      alert("현재 라운드가 아직 끝나지 않았어.");
-      return;
-    }
-
     const pendingIndexes = Object.keys(matchSaveTimers)
       .filter(key => !!matchSaveTimers[key])
       .map(Number);
@@ -1277,6 +1308,9 @@ async function goNextRound() {
     for (const idx of pendingIndexes) {
       await flushMatchSave(idx);
     }
+
+    nextRoundRequestId = "";
+    nextRoundRequestedRound = 0;
 
     if (restoredCompletedRound) {
       saveRestoredCompletedRoundSnapshot();
@@ -1307,11 +1341,7 @@ async function goNextRound() {
     updateScore();
     refreshRoundActionButtons();
 
-    if (!isHost) {
-      alert("다음 라운드 요청을 반영했어. 새 대진은 방장 로직으로 생성돼.");
-      return;
-    }
-
+    await saveRoomStateOnly();
     await makeMatch(true);
   } finally {
     endHostAction();
@@ -1440,6 +1470,7 @@ async function finishWinner() {
 
     if (!isHost && willCompleteRound) {
       participantCanSeeNextRound = true;
+      refreshRoundActionButtons();
     }
 
     await checkRoundEnd();
@@ -1593,6 +1624,8 @@ async function undoRound() {
     roundLocked = true;
     restoredCompletedRound = true;
     participantCanSeeNextRound = false;
+    nextRoundRequestId = "";
+    nextRoundRequestedRound = 0;
 
     renderHistory();
     renderMatches();
@@ -1675,6 +1708,25 @@ function shouldKeepLocalMatch(local, serverRow, idx) {
   return true;
 }
 
+function maybeHandleParticipantNextRoundRequest() {
+  if (!isHost) return;
+  if (!nextRoundRequestId) return;
+  if (nextRoundRequestedRound !== round) return;
+  if (!isCurrentRoundCompleted()) return;
+  if (lastHandledNextRoundRequestId === nextRoundRequestId) return;
+  if (hostActionBusy) return;
+
+  lastHandledNextRoundRequestId = nextRoundRequestId;
+
+  setTimeout(async () => {
+    if (!isHost) return;
+    if (!nextRoundRequestId) return;
+    if (nextRoundRequestedRound !== round) return;
+    if (!isCurrentRoundCompleted()) return;
+    await goNextRound();
+  }, 80);
+}
+
 async function loadRoomStateFromServer() {
   if (!currentRoomCode || !supabaseClient) return;
 
@@ -1732,6 +1784,8 @@ async function loadRoomStateFromServer() {
   neededResults = meta.neededResults || 0;
   restoredCompletedRound = !!meta.restoredCompletedRound;
   restoredSnapshotIndex = typeof meta.restoredSnapshotIndex === "number" ? meta.restoredSnapshotIndex : -1;
+  nextRoundRequestId = meta.nextRoundRequestId || "";
+  nextRoundRequestedRound = meta.nextRoundRequestedRound || 0;
 
   currentMatches = (matches || []).map((m, idx) => {
     const local = previousLocalMatches[idx];
@@ -1792,6 +1846,8 @@ async function loadRoomStateFromServer() {
 
   setSyncStatus("실시간 연결 중");
   isApplyingRemoteState = false;
+
+  maybeHandleParticipantNextRoundRequest();
 }
 
 async function subscribeRoomRealtime() {
