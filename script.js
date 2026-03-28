@@ -52,6 +52,7 @@ let hostActionBusy = false;
 
 let currentPage = "home";
 let scoreRefereeMode = false;
+let scoreSidePanelOpen = false;
 
 const SUPABASE_URL = "https://crzulknhwcvhepajsxnl.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyenVsa25od2N2aGVwYWpzeG5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MTY5MjQsImV4cCI6MjA4OTA5MjkyNH0.EwbPzEZ4LQMrHxDLEz0MElsAdPj2k9DPXFl_2Kczbyw";
@@ -441,6 +442,24 @@ function updateHostOnlyUI() {
   });
 }
 
+function updateScoreSidePanel() {
+  const panel = document.getElementById("scoreSidePanel");
+  if (!panel) return;
+
+  panel.classList.remove("score-side-panel-open", "score-side-panel-hidden");
+  panel.classList.add(scoreSidePanelOpen ? "score-side-panel-open" : "score-side-panel-hidden");
+}
+
+function toggleScoreSidePanel() {
+  scoreSidePanelOpen = !scoreSidePanelOpen;
+  updateScoreSidePanel();
+}
+
+function openScoreMatchSelector() {
+  scoreSidePanelOpen = true;
+  updateScoreSidePanel();
+}
+
 function renderScoreMatchList() {
   const el = document.getElementById("scoreMatchList");
   if (!el) return;
@@ -456,7 +475,7 @@ function renderScoreMatchList() {
     const teamB = m.teams[1].join(" / ");
     const finishedText = m.finished ? " / 경기 종료" : "";
     html += `
-      <div class="match" onclick="openScoreFromScorePage(${i})">
+      <div class="match" onclick="selectScoreMatch(${i})">
         <div class="courtBadge">${i + 1}코트</div>
         <b>${teamA} VS ${teamB}</b>
         <div class="small">현재 점수: ${m.scoreA} : ${m.scoreB}${finishedText}</div>
@@ -526,6 +545,14 @@ async function leaveScoreRefereeMode() {
   } catch (e) {}
 }
 
+async function exitScorePage() {
+  await leaveScoreRefereeMode();
+  scoreSidePanelOpen = false;
+  updateScoreSidePanel();
+  currentPage = "round";
+  goPage("round");
+}
+
 function clearSelectedMatch() {
   currentScoreMatch = -1;
   editMode = false;
@@ -536,20 +563,26 @@ function clearSelectedMatch() {
   document.getElementById("scoreA").innerText = "0";
   document.getElementById("scoreB").innerText = "0";
   document.getElementById("courtNotice").innerText = "";
+  scoreSidePanelOpen = false;
+  updateScoreSidePanel();
+}
+
+function selectScoreMatch(i) {
+  openScore(i);
+  scoreSidePanelOpen = false;
+  updateScoreSidePanel();
 }
 
 function openScoreFromScorePage(i) {
   goPage("score");
   openScore(i);
+  scoreSidePanelOpen = false;
+  updateScoreSidePanel();
 }
 
 function goPage(name) {
   const prevPage = currentPage;
   currentPage = name;
-
-  if (prevPage === "score" && name !== "score") {
-    leaveScoreRefereeMode();
-  }
 
   document.querySelectorAll(".page").forEach(el => {
     el.classList.remove("active");
@@ -563,8 +596,16 @@ function goPage(name) {
     if (btn.dataset.page === name) btn.classList.add("active");
   });
 
+  if (prevPage === "score" && name !== "score") {
+    leaveScoreRefereeMode();
+    scoreSidePanelOpen = false;
+    updateScoreSidePanel();
+  }
+
   if (name === "score") {
     enterScoreRefereeMode();
+    scoreSidePanelOpen = false;
+    updateScoreSidePanel();
   }
 
   updateFloatingRoomStatus();
@@ -1461,6 +1502,7 @@ async function makeMatch(skipHostBusyCheck = false) {
     const ok = await replaceAllMatchesOnServer();
     if (!ok) return;
     await saveRoomStateOnly();
+    setTimeout(() => loadRoomStateFromServer(), 150);
   } finally {
     if (!skipHostBusyCheck) {
       endHostAction();
@@ -1485,6 +1527,7 @@ async function requestNextRoundFromParticipant() {
   refreshRoundActionButtons();
 
   await saveRoomStateOnly();
+  setTimeout(() => loadRoomStateFromServer(), 150);
   alert("다음 라운드 요청을 보냈어.");
 }
 
@@ -1546,6 +1589,7 @@ async function goNextRound() {
 
     await saveRoomStateOnly();
     await makeMatch(true);
+    setTimeout(() => loadRoomStateFromServer(), 150);
   } finally {
     endHostAction();
   }
@@ -1660,6 +1704,7 @@ async function finishWinner() {
 
   await flushMatchSave(currentScoreMatch);
   await saveRoomStateOnly();
+  setTimeout(() => loadRoomStateFromServer(), 120);
 
   if (!editMode && !wasFinished) {
     alert("🏸 승리 팀\n" + match.teams[actualWinnerIndex].join(" / "));
@@ -1767,6 +1812,7 @@ async function checkRoundEnd() {
 
   collectPlayers();
   await saveRoomStateOnly();
+  setTimeout(() => loadRoomStateFromServer(), 150);
 
   if (players.filter(p => loss[p] < 3).length < 4) {
     const matchEl = document.getElementById("match");
@@ -1845,6 +1891,7 @@ async function undoRound() {
     const ok = await replaceAllMatchesOnServer();
     if (!ok) return;
     await saveRoomStateOnly();
+    setTimeout(() => loadRoomStateFromServer(), 150);
 
     alert(`Round ${round} 상태로 복구했어.`);
   } finally {
@@ -2306,6 +2353,7 @@ function setupPlayerSync() {
     el.addEventListener("change", async () => {
       if (!isHost) return;
       await saveRoomStateOnly();
+      setTimeout(() => loadRoomStateFromServer(), 120);
     });
   }
 }
