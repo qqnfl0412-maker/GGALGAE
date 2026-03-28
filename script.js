@@ -546,10 +546,11 @@ async function leaveScoreRefereeMode() {
 }
 
 async function exitScorePage() {
-  await leaveScoreRefereeMode();
   scoreSidePanelOpen = false;
   updateScoreSidePanel();
-  currentPage = "round";
+  clearSelectedMatch();
+
+  await leaveScoreRefereeMode();
   goPage("round");
 }
 
@@ -563,8 +564,7 @@ function clearSelectedMatch() {
   document.getElementById("scoreA").innerText = "0";
   document.getElementById("scoreB").innerText = "0";
   document.getElementById("courtNotice").innerText = "";
-  scoreSidePanelOpen = false;
-  updateScoreSidePanel();
+  renderScoreMatchList();
 }
 
 function selectScoreMatch(i) {
@@ -1627,7 +1627,7 @@ async function addScore(team) {
         currentMatches[currentScoreMatch] &&
         !currentMatches[currentScoreMatch].finished
       ) {
-        await finishGame();
+        await finishGame(false);
       }
     }, 90);
   }
@@ -1656,7 +1656,7 @@ async function undoScore() {
   scheduleMatchSave(currentScoreMatch);
 }
 
-async function finishGame() {
+async function finishGame(shouldExitAfterFinish = true) {
   if (currentScoreMatch < 0 || !currentMatches[currentScoreMatch]) return;
   if (scoreButtonsLocked) return;
 
@@ -1669,6 +1669,10 @@ async function finishGame() {
   setScoreButtonsDisabled(true);
   try {
     await finishWinner();
+
+    if (shouldExitAfterFinish) {
+      await exitScorePage();
+    }
   } finally {
     setScoreButtonsDisabled(false);
   }
