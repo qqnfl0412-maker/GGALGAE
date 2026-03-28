@@ -55,7 +55,7 @@ let scoreRefereeMode = false;
 let scoreSidePanelOpen = false;
 
 const SUPABASE_URL = "https://crzulknhwcvhepajsxnl.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyenVsa25od2N2aGVwYWpzeG5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MTY5MjQsImV4cCI6MjA4OTA5MjkyNH0.EwbPzEZ4LQMrHxDLEz0MElsAdPj2k9DPXFl_2Kczbyw";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyenVsa25od2N2aGVwYWpzeG5sIiwicm9sZSI6ImFub24iLCJpcCI6MTc3MzUxNjkyNCwiZXhwIjoyMDg5MDkyOTI0fQ.EwbPzEZ4LQMrHxDLEz0MElsAdPj2k9DPXFl_2Kczbyw";
 
 function pairKey(a, b) {
   return [a, b].sort().join("|");
@@ -424,17 +424,8 @@ function updateCurrentRoundLabel() {
   if (el) el.innerText = round;
 }
 
-function isPortraitViewport() {
-  return window.innerHeight > window.innerWidth;
-}
-
 function applyForcedRotatedClass() {
-  if (!scoreRefereeMode) return;
-  if (isPortraitViewport()) {
-    document.body.classList.add("force-rotated");
-  } else {
-    document.body.classList.remove("force-rotated");
-  }
+  document.body.classList.remove("force-rotated");
 }
 
 function updateFloatingRoomStatus() {
@@ -487,13 +478,15 @@ function closeScoreSidePanel() {
   updateScoreSidePanel();
 }
 
-function toggleScoreSidePanel() {
-  scoreSidePanelOpen = !scoreSidePanelOpen;
-  updateScoreSidePanel();
+function handleScoreMainPanelClick(event) {
+  if (!scoreSidePanelOpen) return;
+  const clickedButton = event.target.closest("button");
+  if (clickedButton) return;
+  closeScoreSidePanel();
 }
 
-function openScoreMatchSelector() {
-  scoreSidePanelOpen = true;
+function toggleScoreSidePanel() {
+  scoreSidePanelOpen = !scoreSidePanelOpen;
   updateScoreSidePanel();
 }
 
@@ -536,50 +529,23 @@ function showSplashThenApp() {
 }
 
 async function enterFullscreenIfPossible() {
-  const el = document.documentElement;
-  try {
-    if (!document.fullscreenElement && el.requestFullscreen) {
-      await el.requestFullscreen();
-    }
-  } catch (e) {
-    console.log("전체화면 진입 미지원", e);
-  }
+  return;
 }
 
 async function enterScoreRefereeMode() {
   scoreRefereeMode = true;
   document.body.classList.add("score-referee-mode");
-  applyForcedRotatedClass();
+  document.body.classList.remove("force-rotated");
   updateFloatingRoomStatus();
-
-  await enterFullscreenIfPossible();
-
-  try {
-    if (screen.orientation && screen.orientation.lock) {
-      await screen.orientation.lock("landscape");
-    }
-  } catch (e) {
-    console.log("가로 잠금 미지원, CSS 회전으로 대체", e);
-  }
 }
 
 async function leaveScoreRefereeMode() {
   scoreRefereeMode = false;
   document.body.classList.remove("score-referee-mode");
   document.body.classList.remove("force-rotated");
+  scoreSidePanelOpen = false;
+  updateScoreSidePanel();
   updateFloatingRoomStatus();
-
-  try {
-    if (screen.orientation && screen.orientation.unlock) {
-      screen.orientation.unlock();
-    }
-  } catch (e) {}
-
-  try {
-    if (document.fullscreenElement && document.exitFullscreen) {
-      await document.exitFullscreen();
-    }
-  } catch (e) {}
 }
 
 async function exitScorePage() {
@@ -588,7 +554,20 @@ async function exitScorePage() {
   clearSelectedMatch();
 
   await leaveScoreRefereeMode();
-  goPage("round");
+
+  document.querySelectorAll(".page").forEach(el => el.classList.remove("active"));
+  const roundPage = document.getElementById("page-round");
+  if (roundPage) roundPage.classList.add("active");
+
+  currentPage = "round";
+
+  document.querySelectorAll(".nav-btn").forEach(btn => {
+    btn.classList.remove("active");
+    if (btn.dataset.page === "round") btn.classList.add("active");
+  });
+
+  updateFloatingRoomStatus();
+  renderMatches();
 }
 
 function clearSelectedMatch() {
@@ -2062,7 +2041,7 @@ async function loadRoomStateFromServer() {
   roundLocked = room.round_locked;
   currentWaitingPlayers = deepCopy(room.waiting_players || []);
   loss = deepCopy(room.loss_state || {});
-  fixedTeams = deepCopy(room.fixed_teams || {});
+  fixedTeams = deepCopy(room.fixed_teams || []);
 
   const meta = room.meta_state || {};
   applyPlayerInputs(meta.playerInputs || []);
