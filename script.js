@@ -326,6 +326,30 @@ function updatePlayersPreview() {
   el.innerHTML = list.length ? list.join(" / ") : "입력된 참가자가 없어.";
 }
 
+function getLivePlayCount(name) {
+  let count = playCount[name] || 0;
+
+  if (roundLocked && currentMatches.length) {
+    const isPlayingNow = currentMatches.some(match =>
+      match.teams[0].includes(name) || match.teams[1].includes(name)
+    );
+
+    if (isPlayingNow) count += 1;
+  }
+
+  return count;
+}
+
+function getLiveRestCount(name) {
+  let count = restCount[name] || 0;
+
+  if (roundLocked && currentWaitingPlayers.includes(name)) {
+    count += 1;
+  }
+
+  return count;
+}
+
 function updateScore() {
   let html = "";
   const names = Object.keys(loss);
@@ -339,9 +363,12 @@ function updateScore() {
     });
 
     for (const name of names) {
+      const livePlayCount = getLivePlayCount(name);
+      const liveRestCount = getLiveRestCount(name);
+
       let text = `${name} : ${loss[name]}패`;
       if (loss[name] >= 3) text += " (탈락)";
-      text += ` / 출전 ${playCount[name] || 0} / 대기 ${restCount[name] || 0}`;
+      text += ` / 출전 ${livePlayCount} / 대기 ${liveRestCount}`;
       html += text + "<br>";
     }
   }
@@ -444,10 +471,20 @@ function updateHostOnlyUI() {
 
 function updateScoreSidePanel() {
   const panel = document.getElementById("scoreSidePanel");
+  const backdrop = document.getElementById("scoreSideBackdrop");
   if (!panel) return;
 
   panel.classList.remove("score-side-panel-open", "score-side-panel-hidden");
   panel.classList.add(scoreSidePanelOpen ? "score-side-panel-open" : "score-side-panel-hidden");
+
+  if (backdrop) {
+    backdrop.classList.toggle("show", scoreSidePanelOpen);
+  }
+}
+
+function closeScoreSidePanel() {
+  scoreSidePanelOpen = false;
+  updateScoreSidePanel();
 }
 
 function toggleScoreSidePanel() {
@@ -475,7 +512,7 @@ function renderScoreMatchList() {
     const teamB = m.teams[1].join(" / ");
     const finishedText = m.finished ? " / 경기 종료" : "";
     html += `
-      <div class="match" onclick="selectScoreMatch(${i})">
+      <div class="match ${m.finished ? "done" : ""}" onclick="selectScoreMatch(${i})">
         <div class="courtBadge">${i + 1}코트</div>
         <b>${teamA} VS ${teamB}</b>
         <div class="small">현재 점수: ${m.scoreA} : ${m.scoreB}${finishedText}</div>
@@ -2025,7 +2062,7 @@ async function loadRoomStateFromServer() {
   roundLocked = room.round_locked;
   currentWaitingPlayers = deepCopy(room.waiting_players || []);
   loss = deepCopy(room.loss_state || {});
-  fixedTeams = deepCopy(room.fixed_teams || []);
+  fixedTeams = deepCopy(room.fixed_teams || {});
 
   const meta = room.meta_state || {};
   applyPlayerInputs(meta.playerInputs || []);

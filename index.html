@@ -338,7 +338,6 @@
       display: none !important;
     }
 
-    /* 점수판 심판모드 */
     body.score-referee-mode {
       margin: 0;
       max-width: none;
@@ -385,22 +384,22 @@
     }
 
     .score-ref-shell {
-      min-height: 100vh;
+      min-height: 100dvh;
       background: #111827;
       color: white;
-      padding: 10px;
+      padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
       position: relative;
     }
 
     .score-main-panel {
       background: #1f2937;
       border-radius: 18px;
-      padding: 12px;
+      padding: clamp(8px, 2vw, 14px);
       border: 1px solid rgba(255,255,255,0.08);
-      min-height: calc(100vh - 20px);
+      min-height: calc(100dvh - 16px);
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: clamp(8px, 1.6vw, 12px);
     }
 
     .score-top-line {
@@ -411,24 +410,24 @@
     }
 
     .score-round-big {
-      font-size: 28px;
+      font-size: clamp(18px, 3.8vw, 30px);
       font-weight: 900;
     }
 
     .score-mode-box {
-      padding: 10px 12px;
+      padding: clamp(8px, 1.5vw, 10px) clamp(10px, 2vw, 12px);
       border-radius: 12px;
       background: #eef2ff;
       color: #1d4ed8;
-      font-size: 12px;
+      font-size: clamp(11px, 2vw, 13px);
       font-weight: 700;
       min-width: 90px;
       text-align: center;
     }
 
     .court-alert-box {
-      min-height: 34px;
-      font-size: 22px;
+      min-height: 30px;
+      font-size: clamp(16px, 3vw, 24px);
       font-weight: 900;
       color: #f87171;
       display: flex;
@@ -451,26 +450,29 @@
       display: flex;
       flex-direction: column;
       justify-content: space-between;
+      min-width: 0;
     }
 
     .score-team-name {
-      font-size: 28px;
+      font-size: clamp(18px, 3.8vw, 30px);
       font-weight: 900;
       line-height: 1.2;
-      min-height: 72px;
+      min-height: clamp(48px, 10vw, 76px);
+      word-break: keep-all;
+      overflow-wrap: break-word;
     }
 
     .score-big-number {
-      font-size: 150px;
+      font-size: clamp(72px, 18vw, 150px);
       line-height: 1;
       font-weight: 900;
       text-align: center;
-      margin: 6px 0 10px;
+      margin: 4px 0 8px;
     }
 
     .score-plus-btn {
-      min-height: 96px;
-      font-size: 34px;
+      min-height: clamp(64px, 14vw, 96px);
+      font-size: clamp(24px, 5vw, 34px);
       font-weight: 900;
       border-radius: 20px;
       background: #2563eb;
@@ -483,9 +485,24 @@
     }
 
     .score-bottom-bar button {
-      min-height: 74px;
-      font-size: 24px;
+      min-height: clamp(56px, 11vw, 74px);
+      font-size: clamp(16px, 3.6vw, 24px);
       border-radius: 18px;
+    }
+
+    .score-side-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.18);
+      z-index: 190;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .score-side-backdrop.show {
+      opacity: 1;
+      pointer-events: auto;
     }
 
     .score-side-panel {
@@ -560,6 +577,23 @@
 
       .floating-room-status {
         bottom: 132px;
+      }
+
+      .score-team-grid {
+        gap: 8px;
+      }
+
+      .score-team-bigbox {
+        padding: 10px;
+        border-radius: 16px;
+      }
+
+      .score-bottom-bar {
+        gap: 8px;
+      }
+
+      .score-side-panel {
+        width: min(280px, 86vw);
       }
     }
   </style>
@@ -683,6 +717,8 @@
                 <button class="secondary" onclick="exitScorePage()">점수판 종료</button>
               </div>
             </div>
+
+            <div id="scoreSideBackdrop" class="score-side-backdrop" onclick="closeScoreSidePanel()"></div>
 
             <div id="scoreSidePanel" class="score-side-panel score-side-panel-hidden">
               <div class="score-match-picker-title">경기 목록</div>
