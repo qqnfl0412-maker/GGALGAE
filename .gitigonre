@@ -1,3 +1,0 @@
-git rm --cached -r [badminton-app]
-git rm --cached -r [style.css]
-git rm --cached -r [script.js]
