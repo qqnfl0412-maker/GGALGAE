@@ -152,6 +152,48 @@ function openScoreFromScorePage(i) {
   updateScoreSidePanel();
 }
 
+function swapCourtSides() {
+  if (window.currentScoreMatch < 0 || !window.currentMatches[window.currentScoreMatch]) {
+    alert("먼저 경기를 선택해줘.");
+    return;
+  }
+  if (window.scoreButtonsLocked || window.scoreInputBusy) return;
+
+  brieflyLockScoreInput();
+
+  const match = window.currentMatches[window.currentScoreMatch];
+  match.scoreHistory.push({
+    teams: deepCopy(match.teams),
+    scoreA: match.scoreA,
+    scoreB: match.scoreB,
+    winnerIndex: match.winnerIndex
+  });
+
+  const oldTeamA = deepCopy(match.teams[0]);
+  const oldTeamB = deepCopy(match.teams[1]);
+
+  match.teams[0] = oldTeamB;
+  match.teams[1] = oldTeamA;
+
+  const oldScoreA = match.scoreA;
+  match.scoreA = match.scoreB;
+  match.scoreB = oldScoreA;
+
+  if (match.winnerIndex === 0) match.winnerIndex = 1;
+  else if (match.winnerIndex === 1) match.winnerIndex = 0;
+
+  markMatchDirty(window.currentScoreMatch, 1400);
+
+  updateScoreBoard();
+  updateMatchBox(window.currentScoreMatch);
+  renderMatches();
+  renderScoreMatchList();
+  syncRestoredSnapshotIfNeeded();
+
+  scheduleMatchSave(window.currentScoreMatch);
+}
+
+
 function updateScoreBoard() {
   if (window.currentScoreMatch < 0 || !window.currentMatches[window.currentScoreMatch]) return;
 
@@ -192,7 +234,12 @@ async function addScore(team) {
   brieflyLockScoreInput();
 
   const match = window.currentMatches[window.currentScoreMatch];
-  match.scoreHistory.push([match.scoreA, match.scoreB]);
+  match.scoreHistory.push({
+    teams: deepCopy(match.teams),
+    scoreA: match.scoreA,
+    scoreB: match.scoreB,
+    winnerIndex: match.winnerIndex
+  });
 
   if (team === 0) match.scoreA++;
   else match.scoreB++;
@@ -233,8 +280,16 @@ async function undoScore() {
   if (!match.scoreHistory.length) return;
 
   const last = match.scoreHistory.pop();
-  match.scoreA = last[0];
-  match.scoreB = last[1];
+
+  if (Array.isArray(last)) {
+    match.scoreA = last[0];
+    match.scoreB = last[1];
+  } else if (last && typeof last === "object") {
+    if (last.teams) match.teams = deepCopy(last.teams);
+    match.scoreA = last.scoreA ?? 0;
+    match.scoreB = last.scoreB ?? 0;
+    match.winnerIndex = typeof last.winnerIndex === "number" ? last.winnerIndex : null;
+  }
 
   markMatchDirty(window.currentScoreMatch, 1200);
 

@@ -4,6 +4,11 @@
   <meta charset="UTF-8" />
   <title>배드민턴 대진표</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#111827">
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="css/common.css">
   <link rel="stylesheet" href="css/scoreboard.css">
@@ -121,6 +126,17 @@
                   <button class="score-plus-btn" type="button" onclick="addScore(0)">+1</button>
                 </div>
 
+                <div class="score-center-swap">
+                  <button
+                    id="courtSwapBtn"
+                    class="score-swap-btn"
+                    type="button"
+                    onclick="swapCourtSides()"
+                    aria-label="코트 체인지"
+                    title="코트 체인지"
+                  >↔</button>
+                </div>
+
                 <div class="score-team-bigbox">
                   <div id="teamB" class="score-team-name">팀 B</div>
                   <div id="scoreB" class="score-big-number">0</div>
@@ -212,5 +228,12 @@
   <script src="js/supabase-config.js"></script>
   <script src="js/scoreboard.js"></script>
   <script src="js/app.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js").catch(console.error);
+      });
+    }
+  </script>
 </body>
 </html>

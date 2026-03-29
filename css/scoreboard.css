@@ -104,11 +104,40 @@ body.score-referee-mode #page-score.active {
 
 .score-team-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 10px;
   flex: 1;
   min-height: 0;
+  align-items: center;
 }
+
+.score-center-swap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+}
+
+.score-swap-btn {
+  min-width: 46px;
+  min-height: 46px;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 22px;
+  font-weight: 900;
+  background: #e5e7eb;
+  color: #111827;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.score-swap-btn:disabled {
+  opacity: 0.55;
+}
+
 
 .score-team-bigbox {
   background: #0f172a;
@@ -271,6 +300,18 @@ body.score-referee-mode #page-score.active {
 
   .score-big-number {
     font-size: clamp(52px, 12vw, 108px);
+  }
+
+  .score-team-grid {
+    grid-template-columns: minmax(0, 1fr) 48px minmax(0, 1fr);
+  }
+
+  .score-swap-btn {
+    min-width: 40px;
+    min-height: 40px;
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
   }
 
   .score-team-name {

@@ -145,7 +145,12 @@ function setScoreButtonsDisabled(disabled) {
   window.scoreButtonsLocked = disabled;
   document.querySelectorAll("#page-score button").forEach(btn => {
     const text = (btn.textContent || "").trim();
-    if (text === "+1" || text === "점수 되돌리기" || text === "경기 종료") {
+    if (
+      text === "+1" ||
+      text === "점수 되돌리기" ||
+      text === "경기 종료" ||
+      btn.id === "courtSwapBtn"
+    ) {
       btn.disabled = disabled;
     }
   });

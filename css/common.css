@@ -46,7 +46,7 @@ body {
 
 .content {
   flex: 1;
-  padding: 14px 14px 120px;
+  padding: 14px 14px 150px;
 }
 
 .page {
@@ -75,7 +75,7 @@ input, select {
   width: 100%;
   min-height: 44px;
   font-size: 16px;
-  padding: 10px 12px;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
   margin: 0;
   border-radius: 12px;
   border: 1px solid #d1d5db;
@@ -180,7 +180,7 @@ button:disabled {
   display: inline-block;
   margin-left: 6px;
   padding: 4px 8px;
-  border-radius: 999px;
+  border-radius: 0 0 16px 16px;
   background: #eef2ff;
   color: #1d4ed8;
   font-size: 12px;
@@ -193,7 +193,7 @@ button:disabled {
   font-weight: 800;
   background: #dbeafe;
   color: #1d4ed8;
-  border-radius: 999px;
+  border-radius: 0 0 16px 16px;
   padding: 5px 10px;
   margin-bottom: 8px;
 }
@@ -209,20 +209,19 @@ button:disabled {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 74px;
-  z-index: 65;
+  bottom: 0;
+  z-index: 60;
   display: none;
   align-items: center;
   gap: 8px;
-  border-radius: 999px;
-  padding: 10px 12px;
-  background: rgba(17,24,39,0.92);
+  border-radius: 0 0 16px 16px;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  background: rgba(17,24,39,0.96);
   color: white;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.18);
   font-size: 12px;
   font-weight: 700;
-  width: calc(100% - 24px);
-  max-width: 456px;
+  width: 100%;
+  max-width: 480px;
   justify-content: center;
 }
 
@@ -251,7 +250,7 @@ button:disabled {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 0;
+  bottom: 32px;
   width: 100%;
   max-width: 480px;
   background: #ffffff;
@@ -341,6 +340,6 @@ button:disabled {
   }
 
   .floating-room-status {
-    bottom: 132px;
+    bottom: 0;
   }
 }
