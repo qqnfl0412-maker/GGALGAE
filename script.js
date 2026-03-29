@@ -424,8 +424,19 @@ function updateCurrentRoundLabel() {
   if (el) el.innerText = round;
 }
 
-function applyForcedRotatedClass() {
-  document.body.classList.remove("force-rotated");
+function isPortraitViewport() {
+  return window.innerHeight > window.innerWidth;
+}
+
+function updateScoreOrientationGuide() {
+  const guide = document.getElementById("scoreOrientationGuide");
+  if (!guide) return;
+
+  if (scoreRefereeMode && isPortraitViewport()) {
+    guide.style.display = "block";
+  } else if (guide) {
+    guide.style.display = "";
+  }
 }
 
 function updateFloatingRoomStatus() {
@@ -480,13 +491,18 @@ function closeScoreSidePanel() {
 
 function handleScoreMainPanelClick(event) {
   if (!scoreSidePanelOpen) return;
-  const clickedButton = event.target.closest("button");
-  if (clickedButton) return;
+  if (event.target.closest("button")) return;
   closeScoreSidePanel();
 }
 
-function toggleScoreSidePanel() {
+function toggleScoreSidePanel(event) {
+  if (event) event.stopPropagation();
   scoreSidePanelOpen = !scoreSidePanelOpen;
+  updateScoreSidePanel();
+}
+
+function openScoreMatchSelector() {
+  scoreSidePanelOpen = true;
   updateScoreSidePanel();
 }
 
@@ -529,23 +545,38 @@ function showSplashThenApp() {
 }
 
 async function enterFullscreenIfPossible() {
+  // 모바일 웹에서 강제 fullscreen은 검은 화면을 유발하는 경우가 있어 시도하지 않음
   return;
 }
 
 async function enterScoreRefereeMode() {
   scoreRefereeMode = true;
   document.body.classList.add("score-referee-mode");
-  document.body.classList.remove("force-rotated");
   updateFloatingRoomStatus();
+  updateScoreOrientationGuide();
+
+  try {
+    if (screen.orientation && screen.orientation.lock) {
+      await screen.orientation.lock("landscape");
+    }
+  } catch (e) {
+    console.log("브라우저 가로 잠금 미지원", e);
+  }
 }
 
 async function leaveScoreRefereeMode() {
   scoreRefereeMode = false;
   document.body.classList.remove("score-referee-mode");
-  document.body.classList.remove("force-rotated");
   scoreSidePanelOpen = false;
   updateScoreSidePanel();
   updateFloatingRoomStatus();
+  updateScoreOrientationGuide();
+
+  try {
+    if (screen.orientation && screen.orientation.unlock) {
+      screen.orientation.unlock();
+    }
+  } catch (e) {}
 }
 
 async function exitScorePage() {
@@ -625,6 +656,7 @@ function goPage(name) {
   }
 
   updateFloatingRoomStatus();
+  updateScoreOrientationGuide();
   renderScoreMatchList();
 }
 
@@ -2103,6 +2135,7 @@ async function loadRoomStateFromServer() {
   renderScoreMatchList();
   updateFloatingRoomStatus();
   updateHostOnlyUI();
+  updateScoreOrientationGuide();
 
   if (!isCurrentRoundCompleted()) {
     participantCanSeeNextRound = false;
@@ -2183,7 +2216,7 @@ function initSupabase() {
     return;
   }
 
-  if (!SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.includes("여기에_")) {
+  if (!SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.includes("YOUR_")) {
     setSyncStatus("Supabase Key 설정 필요");
     return;
   }
@@ -2378,8 +2411,8 @@ function setupPlayerSync() {
   }
 }
 
-window.addEventListener("resize", applyForcedRotatedClass);
-window.addEventListener("orientationchange", applyForcedRotatedClass);
+window.addEventListener("resize", updateScoreOrientationGuide);
+window.addEventListener("orientationchange", updateScoreOrientationGuide);
 
 window.addEventListener("load", async () => {
   initSupabase();
@@ -2392,6 +2425,7 @@ window.addEventListener("load", async () => {
   renderScoreMatchList();
   updateFloatingRoomStatus();
   updateHostOnlyUI();
+  updateScoreOrientationGuide();
   clearSelectedMatch();
 
   const url = new URL(window.location.href);
