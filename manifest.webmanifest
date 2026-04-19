@@ -1,0 +1,10 @@
+{
+  "name": "배드민턴 대진표",
+  "short_name": "배드민턴앱",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#111827",
+  "orientation": "portrait",
+  "icons": []
+}
