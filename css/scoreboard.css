@@ -26,6 +26,7 @@ body.score-referee-mode #page-score.active {
   display: block;
 }
 
+/* ── 스코어 회전 컨테이너 ── */
 .score-rotator {
   position: fixed;
   inset: 0;
@@ -34,6 +35,44 @@ body.score-referee-mode #page-score.active {
   overflow: hidden;
 }
 
+/* ── 세로 화면: 90도 회전으로 가로 표시 ── */
+@media (orientation: portrait) {
+  body.score-referee-mode .score-rotator {
+    width: 100dvh;
+    height: 100dvw;
+    position: fixed;
+    top: calc((100dvh - 100dvw) / 2);
+    left: calc((100dvw - 100dvh) / 2);
+    transform: rotate(90deg);
+    transform-origin: center center;
+    overflow: hidden;
+  }
+
+  body.score-referee-mode .score-ref-shell {
+    width: 100dvh;
+    height: 100dvw;
+    min-height: 100dvw;
+  }
+
+  body.score-referee-mode .score-main-panel {
+    height: calc(100dvw - 16px);
+  }
+
+  /* 회전 후 실질적 폭은 dvh이므로 폰트도 dvh 기준 */
+  body.score-referee-mode .score-big-number {
+    font-size: clamp(60px, 17dvh, 220px) !important;
+  }
+
+  body.score-referee-mode .score-team-name {
+    font-size: clamp(18px, 3.2dvh, 50px) !important;
+  }
+
+  body.score-referee-mode .score-round-big {
+    font-size: clamp(14px, 2.2dvh, 28px);
+  }
+}
+
+/* ── 가로 화면 기본 (PWA/브라우저 공통) ── */
 .score-ref-shell {
   width: 100%;
   height: 100dvh;
@@ -41,6 +80,8 @@ body.score-referee-mode #page-score.active {
   background: #111827;
   color: white;
   padding: 8px;
+  padding-left: max(8px, env(safe-area-inset-left));
+  padding-right: max(8px, env(safe-area-inset-right));
   position: relative;
 }
 
@@ -49,7 +90,7 @@ body.score-referee-mode #page-score.active {
   height: calc(100dvh - 16px);
   background: #1f2937;
   border-radius: 18px;
-  padding: 10px;
+  padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
   border: 1px solid rgba(255,255,255,0.08);
   display: flex;
   flex-direction: column;
@@ -60,15 +101,17 @@ body.score-referee-mode #page-score.active {
 .score-top-line {
   display: grid;
   grid-template-columns: minmax(0,1fr) auto auto auto;
-  align-items: center;
+  align-items: stretch;
   gap: 8px;
 }
 
 .score-round-big {
-  font-size: clamp(16px, 2.8vw, 30px);
+  font-size: clamp(14px, 2.2vw, 26px);
   font-weight: 900;
   min-width: 0;
   flex: 1;
+  display: flex;
+  align-items: center;
 }
 
 .score-menu-btn,
@@ -79,12 +122,12 @@ body.score-referee-mode #page-score.active {
 }
 
 .score-menu-btn {
-  min-width: 76px;
+  min-width: 72px;
 }
 
 .score-finish-btn {
   min-width: 94px;
-  font-size: clamp(13px, 1.9vw, 18px);
+  font-size: clamp(13px, 1.8vw, 17px);
   padding: 0 12px;
 }
 
@@ -94,7 +137,7 @@ body.score-referee-mode #page-score.active {
   border-radius: 12px;
   background: #eef2ff;
   color: #1d4ed8;
-  font-size: clamp(12px, 1.8vw, 16px);
+  font-size: clamp(12px, 1.6vw, 15px);
   font-weight: 800;
   display: flex;
   align-items: center;
@@ -107,7 +150,7 @@ body.score-referee-mode #page-score.active {
 
 .court-alert-box {
   min-height: 10px;
-  font-size: clamp(16px, 2.4vw, 24px);
+  font-size: clamp(14px, 2vw, 22px);
   font-weight: 900;
   color: #f87171;
   display: flex;
@@ -121,7 +164,7 @@ body.score-referee-mode #page-score.active {
   gap: 10px;
   flex: 1;
   min-height: 0;
-  align-items: center;
+  align-items: stretch;
 }
 
 .score-center-swap {
@@ -129,6 +172,13 @@ body.score-referee-mode #page-score.active {
   align-items: center;
   justify-content: center;
   align-self: center;
+}
+
+.score-center-stack {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
 }
 
 .score-swap-btn {
@@ -151,6 +201,16 @@ body.score-referee-mode #page-score.active {
   opacity: 0.55;
 }
 
+.score-undo-icon-btn {
+  min-width: 46px;
+  min-height: 46px;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 22px;
+  font-weight: 900;
+}
 
 .score-team-bigbox {
   background: #0f172a;
@@ -166,21 +226,29 @@ body.score-referee-mode #page-score.active {
   overflow: hidden;
 }
 
-.score-team-name-strip {
-  min-height: clamp(58px, 12vh, 96px);
-  border-radius: 14px;
-  background: rgba(255,255,255,0.08);
-  display: flex;
-  align-items: center;
+.score-team-bigbox.score-tap-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  text-align: inherit;
+  cursor: pointer;
   justify-content: center;
-  padding: 8px 10px;
-  margin-bottom: 8px;
+  gap: 10px;
+  min-height: 0;
+}
+
+.score-team-bigbox.score-tap-btn:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.score-team-bigbox.score-tap-btn:active {
+  transform: scale(0.995);
 }
 
 .score-team-name {
   width: 100%;
   text-align: center;
-  font-size: clamp(22px, 3vw, 44px);
+  font-size: clamp(18px, 2.8vw, 42px);
   font-weight: 900;
   line-height: 1.15;
   word-break: break-word;
@@ -188,6 +256,7 @@ body.score-referee-mode #page-score.active {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  min-height: 0;
 }
 
 .score-big-number {
@@ -195,7 +264,7 @@ body.score-referee-mode #page-score.active {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(118px, 24vw, 280px);
+  font-size: clamp(60px, 16vw, 240px);
   line-height: 0.9;
   font-weight: 900;
   text-align: center;
@@ -203,27 +272,11 @@ body.score-referee-mode #page-score.active {
   user-select: none;
 }
 
-.score-plus-btn {
-  min-height: clamp(56px, 10vh, 96px);
-  font-size: clamp(24px, 4vw, 36px);
-  font-weight: 900;
-  border-radius: 18px;
-  background: #2563eb;
-}
-
 .score-bottom-bar {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
+  display: none !important;
 }
 
-.score-bottom-bar button {
-  min-height: clamp(50px, 9vh, 74px);
-  font-size: clamp(14px, 2.2vw, 22px);
-  border-radius: 16px;
-  padding: 8px;
-}
-
+/* ── 사이드 패널 ── */
 .score-side-backdrop {
   position: fixed;
   inset: 0;
@@ -295,6 +348,9 @@ body.score-referee-mode #page-score.active {
   color: white;
 }
 
+.score-match-picker {
+}
+
 .score-empty-text {
   color: #cbd5e1;
   font-size: 16px;
@@ -323,184 +379,50 @@ body.score-referee-mode #page-score.active {
   color: #cbd5e1;
 }
 
-/* 세로 화면에서 스코어보드 강제 90도 회전 */
-@media (orientation: portrait) {
-  body.score-referee-mode .score-rotator {
-    width: 100dvh;
-    height: 100dvw;
-    position: fixed;
-    top: calc((100dvh - 100dvw) / 2);
-    left: calc((100dvw - 100dvh) / 2);
-    transform: rotate(90deg);
-    transform-origin: center center;
-    overflow: hidden;
-  }
-}
-
-@media (orientation: portrait) and (max-width: 900px) {
-  .score-orientation-guide {
-    display: none;
-  }
-
+/* ── 작은 가로 화면 (핸드폰 landscape) ── */
+@media (max-height: 500px) and (orientation: landscape) {
   .score-main-panel {
-    height: calc(100dvh - 16px);
-  }
-
-  .score-big-number {
-    font-size: clamp(52px, 12vw, 108px);
+    gap: 6px;
+    padding-top: max(6px, env(safe-area-inset-top));
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
   }
 
   .score-team-grid {
-    grid-template-columns: minmax(0, 1fr) 48px minmax(0, 1fr);
+    gap: 6px;
   }
 
-  .score-swap-btn {
-    min-width: 40px;
-    min-height: 40px;
-    width: 40px;
-    height: 40px;
-    font-size: 18px;
+  .score-menu-btn,
+  .score-finish-btn {
+    min-height: 38px;
+    font-size: 13px;
+  }
+
+  .score-big-number {
+    font-size: clamp(50px, 18vw, 160px);
   }
 
   .score-team-name {
-    font-size: clamp(16px, 4vw, 22px);
-    min-height: 42px;
+    font-size: clamp(14px, 2.4vw, 30px);
+  }
+}
+
+/* ── 넓은 태블릿/데스크탑 가로 ── */
+@media (min-width: 900px) and (orientation: landscape) {
+  .score-big-number {
+    font-size: clamp(80px, 14vw, 300px);
   }
 
-  .score-plus-btn {
-    min-height: 54px;
+  .score-team-name {
+    font-size: clamp(24px, 3vw, 56px);
   }
 
-  .score-bottom-bar button {
-    min-height: 48px;
-    font-size: 14px;
+  .score-round-big {
+    font-size: clamp(16px, 2vw, 28px);
   }
 }
 
 @media (max-width: 420px) {
   .score-side-panel {
     width: min(280px, 86vw);
-  }
-}
-
-/* 2026-04 UI refinements */
-.score-main-panel {
-  padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
-}
-
-.score-top-line {
-  align-items: stretch;
-}
-
-.score-menu-btn,
-.score-finish-btn {
-  min-height: 46px;
-  white-space: nowrap;
-}
-
-.score-finish-btn {
-  min-width: 96px;
-}
-
-.score-team-grid {
-  align-items: stretch;
-  gap: 12px;
-}
-
-.score-team-bigbox.score-tap-btn {
-  appearance: none;
-  -webkit-appearance: none;
-  text-align: inherit;
-  cursor: pointer;
-  justify-content: center;
-  gap: 10px;
-  min-height: 0;
-}
-
-.score-team-bigbox.score-tap-btn:disabled {
-  opacity: 0.65;
-  cursor: default;
-}
-
-.score-team-bigbox.score-tap-btn:active {
-  transform: scale(0.995);
-}
-
-.score-team-name {
-  min-height: 0;
-  text-align: center;
-}
-
-.score-big-number {
-  margin: 0;
-  font-size: clamp(54px, 11vw, 150px);
-}
-
-.score-center-stack {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 12px;
-}
-
-.score-undo-icon-btn {
-  min-width: 46px;
-  min-height: 46px;
-  width: 46px;
-  height: 46px;
-  padding: 0;
-  border-radius: 999px;
-  font-size: 22px;
-  font-weight: 900;
-}
-
-.score-bottom-bar {
-  display: none !important;
-}
-
-@media (max-height: 520px) {
-  .score-main-panel {
-    gap: 8px;
-  }
-
-  .score-team-grid {
-    gap: 8px;
-  }
-
-  .score-team-bigbox.score-tap-btn {
-    padding: 10px;
-  }
-
-  .score-big-number {
-    font-size: clamp(42px, 10vw, 110px);
-  }
-
-  .score-menu-btn,
-  .score-finish-btn {
-    min-height: 40px;
-    font-size: 14px;
-  }
-}
-
-@media (max-width: 900px) and (orientation: landscape) {
-  .score-top-line {
-    gap: 6px;
-  }
-
-  .score-round-big {
-    font-size: clamp(14px, 2.5vw, 24px);
-  }
-
-  .score-menu-btn, .score-finish-btn, .score-mode-inline {
-    min-height: 40px;
-  }
-
-  .score-team-name-strip {
-    min-height: 48px;
-    margin-bottom: 6px;
-  }
-
-  .score-big-number {
-    font-size: clamp(92px, 19vw, 180px);
   }
 }

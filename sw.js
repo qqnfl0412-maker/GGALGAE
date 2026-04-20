@@ -1,4 +1,4 @@
-const CACHE_NAME = "badminton-bracket-v3";
+const CACHE_NAME = "badminton-bracket-v4";
 const ASSETS = [
   "./",
   "./index.html",
