@@ -2258,7 +2258,10 @@ async function subscribeRoomRealtime() {
         await loadRoomStateFromServer();
       }
     )
-    .subscribe();
+    .subscribe(status => {
+      window.realtimeRoomConnected = (status === "SUBSCRIBED");
+      startPollingFallbackIfNeeded();
+    });
 
   window.matchesChannel = window.supabaseClient
     .channel(`matches-${window.currentRoomCode}`)
@@ -2275,7 +2278,27 @@ async function subscribeRoomRealtime() {
         await loadRoomStateFromServer();
       }
     )
-    .subscribe();
+    .subscribe(status => {
+      window.realtimeMatchesConnected = (status === "SUBSCRIBED");
+      startPollingFallbackIfNeeded();
+    });
+}
+
+function startPollingFallbackIfNeeded() {
+  if (window.pollingInterval) return;
+  window.pollingInterval = setInterval(async () => {
+    if (!window.currentRoomCode) return;
+    if (window.realtimeRoomConnected && window.realtimeMatchesConnected) return;
+    if (Date.now() < window.suppressRoomReloadUntil) return;
+    await loadRoomStateFromServer();
+  }, 5000);
+}
+
+function stopPollingFallback() {
+  if (window.pollingInterval) {
+    clearInterval(window.pollingInterval);
+    window.pollingInterval = null;
+  }
 }
 
 function randomCode(length = 6) {
@@ -2623,7 +2646,9 @@ function syncVisiblePlayerSlots() {
 
   const addBtn = document.getElementById("addPlayerBtn");
   if (addBtn) {
-    addBtn.disabled = window.visiblePlayerSlots >= window.APP_CONFIG.game.maxPlayers;
+    const isParticipant = window.loginMode === "participant";
+    addBtn.disabled = isParticipant || window.visiblePlayerSlots >= window.APP_CONFIG.game.maxPlayers;
+    addBtn.style.display = isParticipant ? "none" : "";
   }
 }
 
@@ -2669,6 +2694,7 @@ async function persistPlayerInputs() {
 }
 
 function addPlayerSlot() {
+  if (window.loginMode === "participant") return;
   ensureHiddenPlayerInputs();
   if ((window.visiblePlayerSlots || 4) >= window.APP_CONFIG.game.maxPlayers) return;
   window.visiblePlayerSlots += 1;
@@ -2701,7 +2727,13 @@ function openPlayerModal(slot) {
   actions.className = "player-modal-actions";
   hint.innerText = "";
 
+  const isParticipant = window.loginMode === "participant";
+
   if (!name) {
+    if (isParticipant) {
+      closePlayerModal();
+      return;
+    }
     title.innerText = `${slot}번 선수 입력`;
     textInput.style.display = "block";
     textInput.value = "";
@@ -2720,11 +2752,19 @@ function openPlayerModal(slot) {
   textInput.style.display = "none";
   nameBox.style.display = "block";
   nameBox.innerText = name;
-  actions.innerHTML = `
-    <button type="button" onclick="startPlayerEdit()">수정</button>
-    <button type="button" class="danger" onclick="deletePlayerSlot()">삭제</button>
-    <button type="button" class="secondary" onclick="closePlayerModal()">확인</button>
-  `;
+  if (isParticipant) {
+    actions.classList.add("single");
+    actions.innerHTML = `
+      <button type="button" onclick="startPlayerEdit()">수정</button>
+      <button type="button" class="secondary" onclick="closePlayerModal()">확인</button>
+    `;
+  } else {
+    actions.innerHTML = `
+      <button type="button" onclick="startPlayerEdit()">수정</button>
+      <button type="button" class="danger" onclick="deletePlayerSlot()">삭제</button>
+      <button type="button" class="secondary" onclick="closePlayerModal()">확인</button>
+    `;
+  }
 }
 
 function startPlayerEdit() {

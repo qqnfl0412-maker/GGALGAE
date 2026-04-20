@@ -323,14 +323,27 @@ body.score-referee-mode #page-score.active {
   color: #cbd5e1;
 }
 
+/* 세로 화면에서 스코어보드 강제 90도 회전 */
+@media (orientation: portrait) {
+  body.score-referee-mode .score-rotator {
+    width: 100dvh;
+    height: 100dvw;
+    position: fixed;
+    top: calc((100dvh - 100dvw) / 2);
+    left: calc((100dvw - 100dvh) / 2);
+    transform: rotate(90deg);
+    transform-origin: center center;
+    overflow: hidden;
+  }
+}
+
 @media (orientation: portrait) and (max-width: 900px) {
   .score-orientation-guide {
-    display: block;
-    margin-bottom: 8px;
+    display: none;
   }
 
   .score-main-panel {
-    height: calc(100dvh - 96px);
+    height: calc(100dvh - 16px);
   }
 
   .score-big-number {
