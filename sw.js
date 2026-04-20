@@ -1,4 +1,4 @@
-const CACHE_NAME = "badminton-bracket-v1";
+const CACHE_NAME = "badminton-bracket-v3";
 const ASSETS = [
   "./",
   "./index.html",
@@ -8,9 +8,7 @@ const ASSETS = [
   "./js/app-config.js",
   "./js/supabase-config.js",
   "./js/app.js",
-  "./js/scoreboard.js",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png"
+  "./js/scoreboard.js"
 ];
 
 self.addEventListener("install", event => {
@@ -23,11 +21,9 @@ self.addEventListener("install", event => {
 self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(
-        keys.map(key => {
-          if (key !== CACHE_NAME) return caches.delete(key);
-        })
-      )
+      Promise.all(keys.map(key => {
+        if (key !== CACHE_NAME) return caches.delete(key);
+      }))
     )
   );
   self.clients.claim();
@@ -36,7 +32,24 @@ self.addEventListener("activate", event => {
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
 
-  event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request))
-  );
+  const url = new URL(event.request.url);
+  const isAsset = ASSETS.some(a => url.pathname.endsWith(a.replace("./", "")));
+
+  if (isAsset) {
+    // JS/CSS는 네트워크 우선 → 실패 시 캐시
+    event.respondWith(
+      fetch(event.request)
+        .then(res => {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+          return res;
+        })
+        .catch(() => caches.match(event.request))
+    );
+  } else {
+    // 나머지는 캐시 우선
+    event.respondWith(
+      caches.match(event.request).then(cached => cached || fetch(event.request))
+    );
+  }
 });
