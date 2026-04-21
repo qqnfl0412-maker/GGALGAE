@@ -224,13 +224,19 @@ function swapCourtSides() {
 function fitScoreText() {
   [document.getElementById("teamA"), document.getElementById("teamB")].forEach(el => {
     if (!el) return;
-    const text = (el.innerText || "").trim();
-    const len = text.length;
-
-    el.style.wordBreak = "keep-all";
     el.style.overflowWrap = "anywhere";
     el.style.whiteSpace = "normal";
 
+    if (window.scoreRefereeMode) {
+      // CSS handles sizing in referee mode — clear any stale inline override
+      el.style.fontSize = "";
+      el.style.wordBreak = "break-word";
+      return;
+    }
+
+    const text = (el.innerText || "").trim();
+    const len = text.length;
+    el.style.wordBreak = "keep-all";
     if (len >= 26) el.style.fontSize = "clamp(14px, 1.8vw, 24px)";
     else if (len >= 18) el.style.fontSize = "clamp(16px, 2.1vw, 30px)";
     else if (len >= 12) el.style.fontSize = "clamp(18px, 2.4vw, 36px)";
