@@ -277,6 +277,14 @@
             <button class="danger-btn" type="button" onclick="deleteRoom()">현재 방 삭제</button>
           </div>
         </div>
+
+        <div class="card adminOnly hidden-admin">
+          <h3>방 관리 <span class="room-badge">관리자 전용</span></h3>
+          <div class="btn-grid-1" style="margin-bottom:10px;">
+            <button class="secondary" type="button" onclick="loadRoomList()">방 목록 불러오기</button>
+          </div>
+          <div id="roomListContainer"></div>
+        </div>
       </section>
     </main>
 

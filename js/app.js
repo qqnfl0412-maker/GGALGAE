@@ -2483,6 +2483,21 @@ async function createRoom() {
 
   const rawInput = document.getElementById("roomCodeInput").value.trim();
 
+  // 관리자 코드 입력 시 관리자 권한 부여
+  if (rawInput.toLowerCase() === "ggalgae") {
+    window.isAdmin = true;
+    window.loginMode = "admin";
+    localStorage.setItem("isAdmin", "1");
+    localStorage.setItem("loginMode", "admin");
+    document.getElementById("roomCodeInput").value = "";
+    updateAdminOnlyUI();
+    updateHomePageMode();
+    updateBottomNav();
+    updateRoomInfo();
+    alert("관리자 권한이 부여됐어.");
+    return;
+  }
+
   if (!beginHostAction()) return;
 
   try {
@@ -2557,7 +2572,24 @@ async function joinRoom() {
   if (!window.supabaseClient) initSupabase();
   if (!window.supabaseClient) return;
 
-  const roomCode = document.getElementById("roomCodeInput").value.trim().toUpperCase();
+  const rawJoin = document.getElementById("roomCodeInput").value.trim();
+
+  // 관리자 코드 입력 시 관리자 권한 부여
+  if (rawJoin.toLowerCase() === "ggalgae") {
+    window.isAdmin = true;
+    window.loginMode = "admin";
+    localStorage.setItem("isAdmin", "1");
+    localStorage.setItem("loginMode", "admin");
+    document.getElementById("roomCodeInput").value = "";
+    updateAdminOnlyUI();
+    updateHomePageMode();
+    updateBottomNav();
+    updateRoomInfo();
+    alert("관리자 권한이 부여됐어.");
+    return;
+  }
+
+  const roomCode = rawJoin.toUpperCase();
   if (!roomCode) {
     alert("방코드를 입력해줘.");
     return;
@@ -2596,15 +2628,15 @@ async function joinRoom() {
 }
 
 function updateRoomInfo() {
-  let role = window.isHost ? "방장" : "일반";
-  if (window.isAdmin) role += " + 관리자";
-
-  const text = window.currentRoomCode
-    ? `방코드: ${window.currentRoomCode} / 권한: ${role}`
-    : (window.isAdmin ? "관리자 모드 (방 미연결)" : "연결된 방 없음");
-
   const roomInfoEl = document.getElementById("roomInfo");
-  if (roomInfoEl) roomInfoEl.innerText = text;
+  if (roomInfoEl) {
+    let roleLabel = "";
+    if (window.loginMode === "admin") roleLabel = "관리자";
+    else if (window.loginMode === "host") roleLabel = "방장";
+    // participant → 빈 문자열
+
+    roomInfoEl.innerText = roleLabel;
+  }
   updateFloatingRoomStatus();
   updateHostOnlyUI();
   updateAdminOnlyUI();
@@ -3356,6 +3388,76 @@ function confirmDeleteRecord() {
   if (detailModal) detailModal.classList.add("hidden");
   saveRoomStateOnly();
   showRecordsList();
+}
+
+/* ════════════════════════════════
+   방 관리 (관리자 전용)
+════════════════════════════════ */
+async function loadRoomList() {
+  if (!window.isAdmin) return;
+  if (!window.supabaseClient) initSupabase();
+
+  const container = document.getElementById("roomListContainer");
+  if (!container) return;
+  container.innerHTML = `<div class="small" style="text-align:center;padding:8px 0;">불러오는 중...</div>`;
+
+  const { data, error } = await window.supabaseClient
+    .from("match_rooms")
+    .select("room_code, round_no, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error || !data) {
+    container.innerHTML = `<div class="small" style="color:#e53535;">불러오기 실패</div>`;
+    return;
+  }
+
+  if (data.length === 0) {
+    container.innerHTML = `<div class="small" style="text-align:center;padding:8px 0;">생성된 방이 없어.</div>`;
+    return;
+  }
+
+  container.innerHTML = data.map(r => {
+    const date = r.created_at ? new Date(r.created_at).toLocaleDateString("ko-KR", { month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" }) : "";
+    const isCurrent = r.room_code === window.currentRoomCode;
+    return `
+      <div class="room-list-item ${isCurrent ? "room-list-item-current" : ""}" onclick="joinRoomByCode('${r.room_code}')">
+        <span class="room-list-code">${r.room_code}</span>
+        <span class="room-list-meta">Round ${r.round_no || 0} · ${date}</span>
+        ${isCurrent ? `<span class="room-list-badge">현재</span>` : ""}
+      </div>`;
+  }).join("");
+}
+
+async function joinRoomByCode(code) {
+  if (!window.supabaseClient) initSupabase();
+  const input = document.getElementById("roomCodeInput");
+  if (input) input.value = code;
+
+  const { data, error } = await window.supabaseClient
+    .from("match_rooms")
+    .select("*")
+    .eq("room_code", code)
+    .maybeSingle();
+
+  if (error || !data) { alert("방을 찾지 못했어."); return; }
+
+  window.currentRoomCode  = code;
+  window.currentHostCode  = data.host_code || "";
+  window.isHost = true; // 관리자는 항상 방장 권한으로 입장
+
+  const url = new URL(window.location.href);
+  url.searchParams.set("room", code);
+  url.searchParams.set("host", window.currentHostCode);
+  window.history.replaceState({}, "", url.toString());
+
+  updateRoomInfo();
+  updateHomePageMode();
+  await subscribeRoomRealtime();
+  await loadRoomStateFromServer();
+  await goPage("round");
+
+  // 목록 갱신 (현재 방 표시)
+  loadRoomList();
 }
 
 /* ════════════════════════════════
