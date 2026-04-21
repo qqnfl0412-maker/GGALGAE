@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>배드민턴 대진표</title>
+  <title>깔개</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -20,8 +20,13 @@
 
   <div class="app-shell">
     <header class="topbar">
-      <h1 class="topbar-title" id="mainTitleText">배드민턴 대진표</h1>
-      <div class="topbar-sub" id="roomInfo">연결된 방 없음</div>
+      <div class="topbar-inner">
+        <div>
+          <h1 class="topbar-title" id="mainTitleText">깔개</h1>
+          <div class="topbar-sub" id="roomInfo">연결된 방 없음</div>
+        </div>
+        <button id="pwaInstallBtn" class="topbar-install-btn" type="button" onclick="triggerPWAInstall()" style="display:none;" title="앱 설치">⬇</button>
+      </div>
     </header>
 
     <main class="content">
@@ -107,9 +112,6 @@
             <button id="nextRoundBtn" onclick="goNextRound()" style="display:none;">다음 라운드</button>
             <button class="gray" onclick="undoRound()">이전 완료 라운드로 복구</button>
           </div>
-          <div class="small" style="margin-top: 10px;">
-            모든 경기가 끝난 뒤, 방장 또는 마지막 경기 종료자가 다음 라운드를 진행할 수 있어.
-          </div>
         </div>
 
         <div class="card">
@@ -121,13 +123,6 @@
       <section id="page-score" class="page">
         <div class="score-rotator">
           <div class="score-ref-shell">
-            <div class="score-orientation-guide" id="scoreOrientationGuide">
-              <div class="score-orientation-card">
-                <div class="score-orientation-title">가로로 돌려서 사용해줘</div>
-                <div class="score-orientation-sub">점수판은 가로형 화면에 맞춰져 있어.</div>
-              </div>
-            </div>
-
             <div class="score-main-panel" onclick="handleScoreMainPanelClick(event)">
               <div class="score-top-line">
                 <div id="scoreRoundLabel" class="score-round-big">경기를 선택해줘</div>
@@ -231,14 +226,48 @@
           </div>
         </div>
 
+        <div class="card hostOnly">
+          <h3>게임 종료</h3>
+          <div class="small" style="margin-bottom: 8px;">현재 기록 탭 내용을 날짜 이름으로 저장해.</div>
+          <div class="btn-grid-1">
+            <button class="secondary" type="button" onclick="saveCurrentRecord()">기록 저장</button>
+          </div>
+        </div>
+
+        <div class="card adminOnly hidden-admin">
+          <h3>기록 관리 <span class="room-badge">관리자 전용</span></h3>
+          <div class="btn-grid-1">
+            <button class="secondary" type="button" onclick="showRecordsList()">기록</button>
+          </div>
+        </div>
+
         <div class="card adminOnly hidden-admin">
           <h3>로고 이미지 변경 <span class="room-badge">관리자 전용</span></h3>
+          <div id="logoPreviewBox" style="display:none;margin-bottom:10px;text-align:center;">
+            <img id="logoPreviewImg" src="" alt="로고 미리보기" style="max-width:100%;max-height:160px;border-radius:12px;border:1px solid #e2e6ef;">
+          </div>
           <div class="btn-grid-1" style="margin-bottom: 8px;">
             <input type="file" id="logoFileInput" accept="image/*" style="display:none" onchange="changeLogoImage(this.files[0])">
             <button type="button" onclick="document.getElementById('logoFileInput').click()">이미지 선택</button>
             <button class="secondary" type="button" onclick="resetLogoImage()">기본 로고로 초기화</button>
           </div>
           <div id="logoPreview" class="small" style="text-align:center;"></div>
+        </div>
+
+        <div class="card adminOnly hidden-admin">
+          <h3>앱 아이콘 생성 <span class="room-badge">관리자 전용</span></h3>
+          <div class="small" style="margin-bottom:10px;">이미지를 선택하면 흰 배경을 제거하고 192×192 / 512×512 PNG를 다운받을 수 있어. 다운받은 파일을 <b>icons/</b> 폴더에 넣고 GitHub에 올려줘.</div>
+          <input type="file" id="iconSourceInput" accept="image/*" style="display:none" onchange="processIconImage(this.files[0])">
+          <div class="btn-grid-1" style="margin-bottom:10px;">
+            <button type="button" onclick="document.getElementById('iconSourceInput').click()">이미지 선택</button>
+          </div>
+          <div id="iconPreviewArea" style="display:none;">
+            <canvas id="iconPreviewCanvas" style="max-width:100%;border-radius:12px;border:1px solid #e2e6ef;margin-bottom:10px;"></canvas>
+            <div class="btn-grid-2">
+              <button class="secondary" type="button" onclick="downloadIcon(192)">icon-192.png 다운로드</button>
+              <button class="secondary" type="button" onclick="downloadIcon(512)">icon-512.png 다운로드</button>
+            </div>
+          </div>
         </div>
 
         <div class="card adminOnly hidden-admin">
@@ -276,6 +305,47 @@
         <div id="playerModalHint" class="small"></div>
       </div>
       <div class="player-modal-actions" id="playerModalActions"></div>
+    </div>
+  </div>
+
+  <!-- 기록 목록 모달 -->
+  <div id="recordsListModal" class="records-modal hidden">
+    <div class="records-modal-overlay" onclick="closeRecordsListModal()"></div>
+    <div class="records-modal-sheet">
+      <div class="records-modal-title">기록 목록</div>
+      <div id="recordsListContainer" class="records-list-container"></div>
+      <div class="records-modal-actions">
+        <button class="gray" type="button" onclick="closeRecordsListModal()">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 기록 상세 모달 (전체화면) -->
+  <div id="recordDetailModal" class="records-detail-modal hidden">
+    <div class="records-detail-content">
+      <div class="records-detail-header">
+        <div class="records-detail-title" id="recordDetailTitle"></div>
+      </div>
+      <div class="records-detail-body" id="recordDetailBody"></div>
+      <div class="records-detail-footer">
+        <button class="gray records-detail-room-btn" id="recordDetailRoomBtn" type="button" onclick="openDeleteRecordModal()"></button>
+        <button type="button" onclick="closeRecordDetail()">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 기록 삭제 모달 -->
+  <div id="deleteRecordModal" class="records-modal hidden">
+    <div class="records-modal-overlay" onclick="closeDeleteRecordModal()"></div>
+    <div class="records-modal-sheet">
+      <div class="records-modal-title">기록 삭제</div>
+      <div class="records-modal-body">
+        <input id="deleteRecordPwInput" type="password" placeholder="비밀번호 입력" style="margin-bottom:0;">
+      </div>
+      <div class="records-modal-actions btn-grid-2" style="margin-top:14px;">
+        <button class="danger-btn" type="button" onclick="confirmDeleteRecord()">삭제</button>
+        <button class="gray" type="button" onclick="closeDeleteRecordModal()">취소</button>
+      </div>
     </div>
   </div>
 

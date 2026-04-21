@@ -1,6 +1,6 @@
 window.APP_CONFIG = {
   app: {
-    title: "배드민턴 대진표",
+    title: "깔개",
     splashTitle: "배드민턴 대진 앱",
     splashSub: "로고는 추후 추가 가능",
     publicBaseUrl: "https://qqnfl0412-maker.github.io/GGALGAE/"

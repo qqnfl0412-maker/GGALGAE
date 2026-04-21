@@ -33,6 +33,7 @@ window.recentTeammates = [];
 window.recentOpponents = [];
 
 window.roundSnapshots = [];
+window.savedRecords = [];
 
 window.eliminationLosses = window.APP_CONFIG?.game?.eliminationLosses ?? 3;
 window.galgeCount = 3;
@@ -658,6 +659,38 @@ function updateAdminOnlyUI() {
   });
 }
 
+async function saveLogoToServer(base64OrNull) {
+  if (!window.supabaseClient || !window.currentRoomCode) return;
+  const { error } = await window.supabaseClient
+    .from("match_rooms")
+    .update({ logo_base64: base64OrNull })
+    .eq("room_code", window.currentRoomCode);
+  if (error) console.error("로고 저장 실패:", error);
+}
+
+function resizeImageToBase64(file, maxPx, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+        const w = Math.round(img.width  * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement("canvas");
+        canvas.width  = w;
+        canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 function loadCustomLogo() {
   const customLogo = localStorage.getItem("customLogoBase64");
   const splashEl = document.getElementById("splashLogoFull");
@@ -666,25 +699,45 @@ function loadCustomLogo() {
       ? `<img src="${customLogo}" style="width:100%;height:100%;object-fit:cover;">`
       : "";
   }
-  const previewEl = document.getElementById("logoPreview");
-  if (previewEl) previewEl.innerText = customLogo ? "현재 커스텀 로고 적용 중" : "";
+  const previewBox = document.getElementById("logoPreviewBox");
+  const previewImg = document.getElementById("logoPreviewImg");
+  const previewEl  = document.getElementById("logoPreview");
+  if (customLogo) {
+    if (previewImg) previewImg.src = customLogo;
+    if (previewBox) previewBox.style.display = "";
+    if (previewEl)  previewEl.innerText = "현재 커스텀 로고 적용 중 (앱 시작 화면에 표시됩니다)";
+  } else {
+    if (previewBox) previewBox.style.display = "none";
+    if (previewImg) previewImg.src = "";
+    if (previewEl)  previewEl.innerText = "설정된 로고 없음";
+  }
 }
 
-function changeLogoImage(file) {
+async function changeLogoImage(file) {
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    localStorage.setItem("customLogoBase64", e.target.result);
+  if (file.size > 10 * 1024 * 1024) {
+    alert("이미지가 너무 커. 10MB 이하 파일을 사용해줘.");
+    return;
+  }
+  const previewEl = document.getElementById("logoPreview");
+  if (previewEl) previewEl.innerText = "처리 중...";
+  try {
+    // 최대 1000px로 리사이즈, JPEG 0.85 품질 → ~200KB 이하
+    const b64 = await resizeImageToBase64(file, 1000, 0.85);
+    localStorage.setItem("customLogoBase64", b64);
     loadCustomLogo();
-    const previewEl = document.getElementById("logoPreview");
-    if (previewEl) previewEl.innerText = "로고 이미지가 변경됐어.";
-  };
-  reader.readAsDataURL(file);
+    await saveLogoToServer(b64);
+    if (previewEl) previewEl.innerText = "저장됐어. 방에 접속한 모든 기기에 반영돼.";
+  } catch (err) {
+    alert("이미지 처리 실패: " + err);
+    if (previewEl) previewEl.innerText = "";
+  }
 }
 
-function resetLogoImage() {
+async function resetLogoImage() {
   localStorage.removeItem("customLogoBase64");
   loadCustomLogo();
+  await saveLogoToServer(null);
   const previewEl = document.getElementById("logoPreview");
   if (previewEl) previewEl.innerText = "기본 로고로 초기화됐어.";
 }
@@ -707,6 +760,11 @@ async function goPage(name) {
 
   if (name === "home") {
     updateHomePageMode();
+    const installBtn = document.getElementById("pwaInstallBtn");
+    if (installBtn) installBtn.style.display = window.pwaInstallEvent ? "" : "none";
+  } else {
+    const installBtn = document.getElementById("pwaInstallBtn");
+    if (installBtn) installBtn.style.display = "none";
   }
 
   if (prevPage === "score" && name !== "score") {
@@ -1269,7 +1327,8 @@ function getRoomMetaState() {
     nextRoundRequestId: window.nextRoundRequestId,
     nextRoundRequestedRound: window.nextRoundRequestedRound,
     eliminationLosses: window.eliminationLosses,
-    galgeCount: window.galgeCount
+    galgeCount: window.galgeCount,
+    savedRecords: deepCopy(window.savedRecords || [])
   };
 }
 
@@ -2164,8 +2223,20 @@ async function loadRoomStateFromServer() {
   window.nextRoundRequestedRound = meta.nextRoundRequestedRound || 0;
   window.eliminationLosses = typeof meta.eliminationLosses === "number" ? meta.eliminationLosses : window.eliminationLosses;
   window.galgeCount = typeof meta.galgeCount === "number" ? meta.galgeCount : (window.galgeCount || 3);
+  window.savedRecords = deepCopy(meta.savedRecords || window.savedRecords || []);
   updateEliminationLossesUI();
   updateGalgeCountUI();
+
+  // 로고 동기화: DB → localStorage → UI
+  const serverLogo = room.logo_base64 || null;
+  const localLogo  = localStorage.getItem("customLogoBase64");
+  if (serverLogo && serverLogo !== localLogo) {
+    localStorage.setItem("customLogoBase64", serverLogo);
+    loadCustomLogo();
+  } else if (!serverLogo && localLogo) {
+    localStorage.removeItem("customLogoBase64");
+    loadCustomLogo();
+  }
 
   window.currentMatches = (matches || []).map((m, idx) => {
     const local = previousLocalMatches[idx];
@@ -3135,3 +3206,234 @@ setTimeout(async () => {
     await lockAppOrientation("portrait");
   }
 }, 500);
+
+/* ════════════════════════════════
+   PWA 설치 버튼
+════════════════════════════════ */
+window.pwaInstallEvent = null;
+
+window.addEventListener("beforeinstallprompt", e => {
+  e.preventDefault();
+  window.pwaInstallEvent = e;
+  const btn = document.getElementById("pwaInstallBtn");
+  if (btn) btn.style.display = "";
+});
+
+window.addEventListener("appinstalled", () => {
+  window.pwaInstallEvent = null;
+  const btn = document.getElementById("pwaInstallBtn");
+  if (btn) btn.style.display = "none";
+});
+
+function triggerPWAInstall() {
+  if (!window.pwaInstallEvent) return;
+  window.pwaInstallEvent.prompt();
+  window.pwaInstallEvent.userChoice.then(() => {
+    window.pwaInstallEvent = null;
+    const btn = document.getElementById("pwaInstallBtn");
+    if (btn) btn.style.display = "none";
+  });
+}
+
+/* ════════════════════════════════
+   기록 저장 / 조회 / 삭제
+════════════════════════════════ */
+window._currentViewingRecord = null;
+
+function generateRecordName() {
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(2);
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const base = `${yy}.${mm}.${dd}`;
+  const same = (window.savedRecords || []).filter(r => r.name === base || r.name.startsWith(base + "-"));
+  if (same.length === 0) return base;
+  return `${base}-${same.length}`;
+}
+
+function saveCurrentRecord() {
+  if (!window.isHost && !window.isAdmin) {
+    alert("방장 또는 관리자만 기록을 저장할 수 있어.");
+    return;
+  }
+  const lines = window.currentRoundHistoryLines || [];
+  if (!lines.length) {
+    if (!confirm("기록이 없어. 그래도 저장할까?")) return;
+  }
+  const name = generateRecordName();
+  const galgeEl = document.getElementById("galgeDisplay");
+  const scoreEl  = document.getElementById("score");
+  const record = {
+    name,
+    timestamp: Date.now(),
+    roomCode: window.currentRoomCode || "-",
+    galgeHtml: galgeEl ? galgeEl.innerHTML : "",
+    scoreHtml: scoreEl  ? scoreEl.innerHTML  : "",
+    historyLines: deepCopy(lines)
+  };
+  if (!window.savedRecords) window.savedRecords = [];
+  window.savedRecords.push(record);
+  saveRoomStateOnly();
+  alert(`"${name}" 이름으로 저장됐어.`);
+}
+
+function showRecordsList() {
+  const modal = document.getElementById("recordsListModal");
+  if (!modal) return;
+  const container = document.getElementById("recordsListContainer");
+  const records = (window.savedRecords || []).slice().sort((a, b) => a.timestamp - b.timestamp);
+  if (records.length === 0) {
+    container.innerHTML = `<div class="small" style="text-align:center;padding:20px 0;">저장된 기록이 없어.</div>`;
+  } else {
+    container.innerHTML = records.map(r =>
+      `<div class="record-list-item" data-rname="${escapeHTML(r.name)}" onclick="showRecordDetail(this.dataset.rname)">${escapeHTML(r.name)}</div>`
+    ).join("");
+  }
+  modal.classList.remove("hidden");
+}
+
+function closeRecordsListModal() {
+  const modal = document.getElementById("recordsListModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function showRecordDetail(name) {
+  const record = (window.savedRecords || []).find(r => r.name === name);
+  if (!record) return;
+  window._currentViewingRecord = record;
+  document.getElementById("recordDetailTitle").innerText = record.name;
+  document.getElementById("recordDetailRoomBtn").innerText = `방 코드: ${record.roomCode || "-"}`;
+  const body = document.getElementById("recordDetailBody");
+  body.innerHTML = `
+    <div class="card">
+      <h3>깔개</h3>
+      <div>${record.galgeHtml || "<span class='small'>깔개 없음</span>"}</div>
+    </div>
+    <div class="card">
+      <h3>패배 / 출전 / 대기 기록</h3>
+      <div style="font-size:13px;line-height:1.7;">${record.scoreHtml || "<span class='small'>기록 없음</span>"}</div>
+    </div>
+    <div class="card">
+      <h3>라운드 기록</h3>
+      <div class="history-box">${(record.historyLines || []).join("<br>")}</div>
+    </div>
+  `;
+  closeRecordsListModal();
+  const detailModal = document.getElementById("recordDetailModal");
+  if (detailModal) detailModal.classList.remove("hidden");
+}
+
+function closeRecordDetail() {
+  const modal = document.getElementById("recordDetailModal");
+  if (modal) modal.classList.add("hidden");
+  showRecordsList();
+}
+
+function openDeleteRecordModal() {
+  const pw = document.getElementById("deleteRecordPwInput");
+  if (pw) pw.value = "";
+  const modal = document.getElementById("deleteRecordModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeDeleteRecordModal() {
+  const modal = document.getElementById("deleteRecordModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function confirmDeleteRecord() {
+  const pw = (document.getElementById("deleteRecordPwInput")?.value || "").trim();
+  if (pw !== "j1037") {
+    alert("비밀번호가 틀렸어.");
+    return;
+  }
+  const record = window._currentViewingRecord;
+  if (!record) return;
+  window.savedRecords = (window.savedRecords || []).filter(r => r.name !== record.name);
+  window._currentViewingRecord = null;
+  closeDeleteRecordModal();
+  const detailModal = document.getElementById("recordDetailModal");
+  if (detailModal) detailModal.classList.add("hidden");
+  saveRoomStateOnly();
+  showRecordsList();
+}
+
+/* ════════════════════════════════
+   앱 아이콘 생성 (흰 배경 제거)
+════════════════════════════════ */
+window._iconSourceCanvas = null;
+
+function processIconImage(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      // 원본 크기로 캔버스 생성
+      const src = document.createElement("canvas");
+      src.width  = img.width;
+      src.height = img.height;
+      const ctx = src.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+
+      // 코너 플러드필로 흰 배경 제거
+      removeWhiteBg(ctx, src.width, src.height, 230);
+
+      window._iconSourceCanvas = src;
+
+      // 미리보기 (최대 300px)
+      const preview = document.getElementById("iconPreviewCanvas");
+      const scale   = Math.min(1, 300 / Math.max(src.width, src.height));
+      preview.width  = Math.round(src.width  * scale);
+      preview.height = Math.round(src.height * scale);
+      preview.getContext("2d").drawImage(src, 0, 0, preview.width, preview.height);
+
+      document.getElementById("iconPreviewArea").style.display = "";
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeWhiteBg(ctx, w, h, threshold) {
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data    = imgData.data;
+  const visited = new Uint8Array(w * h);
+
+  function isLight(idx) {
+    return data[idx] > threshold && data[idx+1] > threshold && data[idx+2] > threshold;
+  }
+
+  const stack = [];
+  // 네 코너에서 시작
+  [[0,0],[w-1,0],[0,h-1],[w-1,h-1]].forEach(([x,y]) => {
+    const i = y * w + x;
+    if (isLight(i * 4)) { visited[i] = 1; stack.push(i); }
+  });
+
+  while (stack.length) {
+    const i = stack.pop();
+    data[i * 4 + 3] = 0; // 투명
+    const x = i % w, y = (i / w) | 0;
+    for (const [nx, ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]) {
+      if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+        const ni = ny * w + nx;
+        if (!visited[ni] && isLight(ni * 4)) { visited[ni] = 1; stack.push(ni); }
+      }
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+}
+
+function downloadIcon(size) {
+  const src = window._iconSourceCanvas;
+  if (!src) return;
+  const out = document.createElement("canvas");
+  out.width = out.height = size;
+  out.getContext("2d").drawImage(src, 0, 0, size, size);
+  const a = document.createElement("a");
+  a.href     = out.toDataURL("image/png");
+  a.download = `icon-${size}.png`;
+  a.click();
+}
