@@ -3,9 +3,8 @@
 html {
   margin: 0;
   padding: 0;
-  overflow-y: auto;
-  overscroll-behavior: none;
-  touch-action: pan-y;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
@@ -15,6 +14,8 @@ body {
   background: #f0f2f7;
   color: #1a1d27;
   overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   overscroll-behavior: none;
   touch-action: pan-y;
 }
