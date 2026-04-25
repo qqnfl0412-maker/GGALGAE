@@ -13,6 +13,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   background: #f0f2f7;
   color: #1a1d27;
+  height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -23,7 +24,7 @@ body {
 body {
   max-width: 480px;
   margin: 0 auto;
-  min-height: 100vh;
+  min-height: 100%;
   background: #f0f2f7;
 }
 
