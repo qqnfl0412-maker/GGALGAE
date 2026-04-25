@@ -950,6 +950,57 @@ async function deleteRoom() {
   }
 }
 
+let _pendingDeleteRoomCode = null;
+
+function deleteRoomByCode(code) {
+  if (!window.isAdmin) { alert("관리자만 방을 삭제할 수 있어."); return; }
+  _pendingDeleteRoomCode = code;
+  const text = document.getElementById("deleteRoomModalText");
+  if (text) text.textContent = `방 "${code}"을 삭제하시겠습니까?`;
+  const modal = document.getElementById("deleteRoomModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+function cancelDeleteRoomByCode() {
+  _pendingDeleteRoomCode = null;
+  const modal = document.getElementById("deleteRoomModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+async function confirmDeleteRoomByCode() {
+  const code = _pendingDeleteRoomCode;
+  cancelDeleteRoomByCode();
+  if (!code) return;
+  if (!beginHostAction()) return;
+  try {
+    await window.supabaseClient.from("match_round_matches").delete().eq("room_code", code);
+    const { error } = await window.supabaseClient.from("match_rooms").delete().eq("room_code", code);
+    if (error) { alert("방 삭제 실패: " + (error.message || "알 수 없는 오류")); return; }
+
+    if (window.currentRoomCode === code) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("room");
+      url.searchParams.delete("host");
+      window.history.replaceState({}, "", url.toString());
+      resetLocalStateOnly();
+      window.currentRoomCode = "";
+      window.currentHostCode = "";
+      window.isHost = false;
+      updateRoomInfo();
+      updateBottomNav();
+      updateHomePageMode();
+      renderHistory();
+      renderMatches();
+      updateScore();
+    }
+
+    loadRoomList();
+    alert("방을 삭제했어.");
+  } finally {
+    endHostAction();
+  }
+}
+
 async function addFixedTeam() {
   if (!ensureHost("고정팀 추가")) return;
   if (!beginHostAction()) return;
@@ -2227,16 +2278,6 @@ async function loadRoomStateFromServer() {
   updateEliminationLossesUI();
   updateGalgeCountUI();
 
-  // 로고 동기화: DB → localStorage → UI
-  const serverLogo = room.logo_base64 || null;
-  const localLogo  = localStorage.getItem("customLogoBase64");
-  if (serverLogo && serverLogo !== localLogo) {
-    localStorage.setItem("customLogoBase64", serverLogo);
-    loadCustomLogo();
-  } else if (!serverLogo && localLogo) {
-    localStorage.removeItem("customLogoBase64");
-    loadCustomLogo();
-  }
 
   window.currentMatches = (matches || []).map((m, idx) => {
     const local = previousLocalMatches[idx];
@@ -3424,6 +3465,7 @@ async function loadRoomList() {
         <span class="room-list-code">${r.room_code}</span>
         <span class="room-list-meta">Round ${r.round_no || 0} · ${date}</span>
         ${isCurrent ? `<span class="room-list-badge">현재</span>` : ""}
+        <button class="room-list-delete-btn" type="button" onclick="event.stopPropagation(); deleteRoomByCode('${r.room_code}')">✕</button>
       </div>`;
   }).join("");
 }

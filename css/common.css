@@ -5,6 +5,7 @@ html {
   padding: 0;
   overflow-y: auto;
   overscroll-behavior: none;
+  touch-action: pan-y;
 }
 
 body {
@@ -15,6 +16,7 @@ body {
   color: #1a1d27;
   overflow-x: hidden;
   overscroll-behavior: none;
+  touch-action: pan-y;
 }
 
 body {
@@ -80,6 +82,7 @@ body {
 .content {
   flex: 1;
   padding: 16px 14px 160px;
+  touch-action: pan-y;
 }
 
 .page {
@@ -729,6 +732,20 @@ button:disabled {
   padding: 2px 8px;
   flex-shrink: 0;
 }
+.room-list-delete-btn {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1;
+  transition: background 0.13s;
+}
+.room-list-delete-btn:active { background: #fee2e2; }
 
 /* ── Responsive ── */
 @media (max-width: 420px) {

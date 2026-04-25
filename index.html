@@ -271,14 +271,6 @@
         </div>
 
         <div class="card adminOnly hidden-admin">
-          <h3>방 삭제 <span class="room-badge">관리자 전용</span></h3>
-          <div class="small" style="margin-bottom: 8px;">DB에서 방을 완전히 삭제해. 오래된 방 코드 정리할 때 사용해.</div>
-          <div class="btn-grid-1">
-            <button class="danger-btn" type="button" onclick="deleteRoom()">현재 방 삭제</button>
-          </div>
-        </div>
-
-        <div class="card adminOnly hidden-admin">
           <h3>방 관리 <span class="room-badge">관리자 전용</span></h3>
           <div class="btn-grid-1" style="margin-bottom:10px;">
             <button class="secondary" type="button" onclick="loadRoomList()">방 목록 불러오기</button>
@@ -353,6 +345,21 @@
       <div class="records-modal-actions btn-grid-2" style="margin-top:14px;">
         <button class="danger-btn" type="button" onclick="confirmDeleteRecord()">삭제</button>
         <button class="gray" type="button" onclick="closeDeleteRecordModal()">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 방 삭제 확인 모달 -->
+  <div id="deleteRoomModal" class="records-modal hidden">
+    <div class="records-modal-overlay" onclick="cancelDeleteRoomByCode()"></div>
+    <div class="records-modal-sheet">
+      <div class="records-modal-title">방 삭제</div>
+      <div class="records-modal-body">
+        <p id="deleteRoomModalText" style="margin:0;font-size:15px;line-height:1.6;"></p>
+      </div>
+      <div class="records-modal-actions btn-grid-2" style="margin-top:14px;">
+        <button class="danger-btn" type="button" onclick="confirmDeleteRoomByCode()">확인</button>
+        <button class="gray" type="button" onclick="cancelDeleteRoomByCode()">취소</button>
       </div>
     </div>
   </div>
