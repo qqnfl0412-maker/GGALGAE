@@ -12,6 +12,7 @@ window.resultCount = 0;
 window.neededResults = 0;
 
 window.currentScoreMatch = -1;
+window.scoreOpenedDbId = null;
 window.roundLocked = false;
 window.editMode = false;
 window.restoredCompletedRound = false;
@@ -2328,10 +2329,19 @@ async function loadRoomStateFromServer() {
 
   refreshRoundActionButtons();
 
+  let scorePageStale = false;
+
   if (window.currentScoreMatch >= 0 && window.currentMatches[window.currentScoreMatch]) {
-    document.getElementById("scoreRoundLabel").innerText = `Round ${window.round} / 경기 ${window.currentScoreMatch + 1}`;
-    document.getElementById("editModeLabel").innerText = window.currentMatches[window.currentScoreMatch].finished ? "수정 모드" : "";
-    updateScoreBoard();
+    const newMatch = window.currentMatches[window.currentScoreMatch];
+    if (window.currentPage === "score" && window.scoreOpenedDbId && newMatch.dbId !== window.scoreOpenedDbId) {
+      scorePageStale = true;
+    } else {
+      document.getElementById("scoreRoundLabel").innerText = `Round ${window.round} / 경기 ${window.currentScoreMatch + 1}`;
+      document.getElementById("editModeLabel").innerText = newMatch.finished ? "수정 모드" : "";
+      updateScoreBoard();
+    }
+  } else if (window.currentPage === "score" && window.currentScoreMatch >= 0) {
+    scorePageStale = true;
   } else {
     clearSelectedMatch();
   }
@@ -2340,6 +2350,11 @@ async function loadRoomStateFromServer() {
   window.isApplyingRemoteState = false;
 
   maybeHandleParticipantNextRoundRequest();
+
+  if (scorePageStale) {
+    alert("종료된 경기입니다.");
+    exitScorePage();
+  }
 }
 
 async function subscribeRoomRealtime() {

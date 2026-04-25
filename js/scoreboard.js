@@ -155,6 +155,7 @@ async function exitScorePage() {
 
 function clearSelectedMatch() {
   window.currentScoreMatch = -1;
+  window.scoreOpenedDbId = null;
   window.editMode = false;
   document.getElementById("scoreRoundLabel").innerText = "경기를 선택해줘";
   document.getElementById("editModeLabel").innerText = "";
@@ -265,6 +266,7 @@ function openScore(i) {
 
   window.currentScoreMatch = i;
   const match = window.currentMatches[i];
+  window.scoreOpenedDbId = match.dbId ?? null;
   window.editMode = match.finished;
 
   document.getElementById("scoreRoundLabel").innerText = `Round ${window.round} / 경기 ${i + 1}`;
