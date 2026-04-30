@@ -124,15 +124,15 @@
         <div class="score-rotator">
           <div class="score-ref-shell">
             <div class="score-main-panel" onclick="handleScoreMainPanelClick(event)">
-              <div class="score-top-line">
+
+              <!-- 상단: 라운드 표시 (중앙 정렬) -->
+              <div class="score-top-bar">
                 <div id="scoreRoundLabel" class="score-round-big">경기를 선택해줘</div>
-                <button class="secondary score-menu-btn" type="button" onclick="toggleScoreSidePanel(event)">메뉴</button>
-                <button id="finishMatchBtn" class="danger-btn score-finish-btn" type="button" onclick="finishGame()">경기 종료</button>
+                <div id="editModeLabel" class="score-mode-box"></div>
+                <div id="courtNotice" class="court-alert-box"></div>
               </div>
 
-              <div id="editModeLabel" class="score-mode-box"></div>
-              <div id="courtNotice" class="court-alert-box"></div>
-
+              <!-- 중앙: 팀A | 버튼 스택 | 팀B -->
               <div class="score-team-grid">
                 <button id="scoreTapA" class="score-team-bigbox score-tap-btn" type="button" onclick="addScore(0)">
                   <div id="teamA" class="score-team-name">팀 A</div>
@@ -156,6 +156,20 @@
                     aria-label="점수 되돌리기"
                     title="점수 되돌리기"
                   >↺</button>
+                  <button
+                    class="score-menu-circle-btn"
+                    type="button"
+                    onclick="toggleScoreSidePanel(event)"
+                    aria-label="메뉴"
+                    title="메뉴"
+                  ><span class="score-hamburger"><span></span><span></span><span></span></span></button>
+                  <button
+                    class="score-close-circle-btn"
+                    type="button"
+                    onclick="exitScorePage()"
+                    aria-label="점수판 종료"
+                    title="점수판 종료"
+                  >✕</button>
                 </div>
 
                 <button id="scoreTapB" class="score-team-bigbox score-tap-btn" type="button" onclick="addScore(1)">
@@ -163,6 +177,12 @@
                   <div id="scoreB" class="score-big-number">0</div>
                 </button>
               </div>
+
+              <!-- 하단: 경기종료 (중앙 정렬, 라운드 표시와 대칭) -->
+              <div class="score-bottom-bar">
+                <button id="finishMatchBtn" class="danger-btn score-finish-btn" type="button" onclick="finishGame()">경기 종료</button>
+              </div>
+
             </div>
 
             <div id="scoreSideBackdrop" class="score-side-backdrop" onclick="closeScoreSidePanel()"></div>
@@ -170,9 +190,7 @@
             <aside id="scoreSidePanel" class="score-side-panel score-side-panel-hidden">
               <div class="score-match-picker-title">경기 목록</div>
               <div id="scoreMatchList" class="score-match-picker"></div>
-
               <div class="score-side-top-buttons" style="margin-top: 12px;">
-                <button class="gray" type="button" onclick="clearSelectedMatch()">경기선택 해제</button>
                 <button class="secondary" type="button" onclick="exitScorePage()">점수판 종료</button>
               </div>
             </aside>
@@ -350,6 +368,20 @@
   </div>
 
   <!-- 방 삭제 확인 모달 -->
+  <div id="galgeEndModal" class="records-modal hidden">
+    <div class="records-modal-overlay"></div>
+    <div class="records-modal-sheet">
+      <div class="records-modal-title">깔개 수 도달</div>
+      <div class="records-modal-body">
+        <p id="galgeEndModalText" style="margin:0;font-size:15px;line-height:1.6;"></p>
+      </div>
+      <div class="records-modal-actions btn-grid-2" style="margin-top:14px;">
+        <button class="danger-btn" type="button" onclick="galgeEndGame()">종료</button>
+        <button type="button" onclick="galgeEndContinue()">진행</button>
+      </div>
+    </div>
+  </div>
+
   <div id="deleteRoomModal" class="records-modal hidden">
     <div class="records-modal-overlay" onclick="cancelDeleteRoomByCode()"></div>
     <div class="records-modal-sheet">

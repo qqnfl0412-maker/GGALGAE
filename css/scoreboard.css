@@ -35,8 +35,6 @@ body.score-referee-mode #page-score.active { display: block; }
 
 /* ════════════════════════════════
    세로 화면 → 90도 회전으로 가로 표시
-   dvw = 기기 실제 너비(짧은 쪽) = 회전 후 높이
-   dvh = 기기 실제 높이(긴 쪽)  = 회전 후 너비
 ════════════════════════════════ */
 @media (orientation: portrait) {
   body.score-referee-mode .score-rotator {
@@ -60,13 +58,12 @@ body.score-referee-mode #page-score.active { display: block; }
 
   body.score-referee-mode .score-main-panel {
     height: 100%;
-    padding: 5px 8px;
-    gap: 4px;
+    padding: 4px 8px;
+    gap: 3px;
   }
 
-  /* 회전 후 실질 높이 = dvw → 폰트를 dvw 기준으로 */
   body.score-referee-mode .score-big-number {
-    font-size: clamp(40px, 46dvw, 220px) !important;
+    font-size: clamp(40px, 44dvw, 220px) !important;
   }
 
   body.score-referee-mode .score-team-name {
@@ -78,27 +75,38 @@ body.score-referee-mode #page-score.active { display: block; }
     font-size: clamp(10px, 3dvw, 20px) !important;
   }
 
-  body.score-referee-mode .score-menu-btn,
   body.score-referee-mode .score-finish-btn {
-    min-height: 32px;
-    font-size: clamp(10px, 2.6dvw, 14px);
-    padding: 0 8px;
+    min-height: 30px;
+    font-size: clamp(10px, 2.8dvw, 14px);
+    padding: 0 10px;
+    min-width: 80px;
   }
 
-  body.score-referee-mode .score-menu-btn  { min-width: 58px; }
-  body.score-referee-mode .score-finish-btn { min-width: 74px; }
-
   body.score-referee-mode .score-swap-btn,
-  body.score-referee-mode .score-undo-icon-btn {
+  body.score-referee-mode .score-undo-icon-btn,
+  body.score-referee-mode .score-menu-circle-btn,
+  body.score-referee-mode .score-close-circle-btn {
     min-width: 34px;
     min-height: 34px;
     width: 34px;
     height: 34px;
-    font-size: 17px;
+    font-size: 16px;
+  }
+
+  body.score-referee-mode .score-hamburger span {
+    width: 13px;
+    height: 2px;
+    gap: 3px;
+  }
+
+  body.score-referee-mode .score-hamburger {
+    gap: 3px;
   }
 
   body.score-referee-mode .score-team-grid { gap: 5px; }
-  body.score-referee-mode .score-center-stack { gap: 6px; }
+  body.score-referee-mode .score-center-stack { gap: 5px; }
+  body.score-referee-mode .score-top-bar { padding: 3px 6px 2px; }
+  body.score-referee-mode .score-bottom-bar { padding: 2px 6px 3px; }
 }
 
 /* ════════════════════════════════
@@ -127,55 +135,48 @@ body.score-referee-mode #page-score.active { display: block; }
   border: 1px solid rgba(255,255,255,0.08);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   position: relative;
   box-sizing: border-box;
   overflow: hidden;
 }
 
-.score-top-line {
-  display: grid;
-  grid-template-columns: minmax(0,1fr) auto auto auto;
+/* ── 상단 바: 라운드 표시 (중앙 정렬) ── */
+.score-top-bar {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 2px;
   flex-shrink: 0;
+  padding: 4px 8px 2px;
+}
+
+/* ── 하단 바: 경기종료 버튼 (중앙 정렬) ── */
+.score-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 2px 8px 4px;
 }
 
 .score-round-big {
   font-size: clamp(13px, 2vw, 24px);
   font-weight: 900;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-}
-
-.score-menu-btn,
-.score-finish-btn,
-.score-mode-inline {
-  min-height: 40px;
-  white-space: nowrap;
-}
-
-.score-menu-btn   { min-width: 68px; }
-.score-finish-btn {
-  min-width: 88px;
-  font-size: clamp(12px, 1.6vw, 16px);
-  padding: 0 10px;
-}
-
-.score-mode-inline {
-  min-width: 80px;
-  padding: 0 10px;
-  border-radius: 10px;
-  background: #eef2ff;
-  color: #1d4ed8;
-  font-size: clamp(11px, 1.4vw, 14px);
-  font-weight: 800;
+  text-align: center;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.score-mode-inline:empty { visibility: hidden; }
+
+.score-finish-btn {
+  min-height: 40px;
+  min-width: 100px;
+  font-size: clamp(12px, 1.6vw, 16px);
+  padding: 0 16px;
+  white-space: nowrap;
+}
 
 .score-mode-box {
   font-size: clamp(11px, 1.4vw, 14px);
@@ -183,6 +184,7 @@ body.score-referee-mode #page-score.active { display: block; }
   color: #93c5fd;
   flex-shrink: 0;
   min-height: 0;
+  text-align: center;
 }
 .score-mode-box:empty { display: none; }
 
@@ -198,6 +200,7 @@ body.score-referee-mode #page-score.active { display: block; }
 }
 .court-alert-box:empty { display: none; }
 
+/* ── 팀 그리드 ── */
 .score-team-grid {
   display: grid;
   grid-template-columns: minmax(0,1fr) auto minmax(0,1fr);
@@ -207,14 +210,17 @@ body.score-referee-mode #page-score.active { display: block; }
   align-items: stretch;
 }
 
+/* ── 중앙 버튼 스택 ── */
 .score-center-swap { display: flex; align-items: center; justify-content: center; }
 .score-center-stack {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
 }
 
+/* ── 교대 버튼 (기존 유지) ── */
 .score-swap-btn {
   min-width: 42px; min-height: 42px;
   width: 42px; height: 42px;
@@ -225,6 +231,7 @@ body.score-referee-mode #page-score.active { display: block; }
 }
 .score-swap-btn:disabled { opacity: 0.55; }
 
+/* ── 되돌리기 버튼 (기존 유지) ── */
 .score-undo-icon-btn {
   min-width: 42px; min-height: 42px;
   width: 42px; height: 42px;
@@ -232,6 +239,48 @@ body.score-referee-mode #page-score.active { display: block; }
   font-size: 20px; font-weight: 900;
 }
 
+/* ── 메뉴 버튼 (햄버거 아이콘, 원형) ── */
+.score-menu-circle-btn {
+  min-width: 42px; min-height: 42px;
+  width: 42px; height: 42px;
+  padding: 0; border-radius: 999px;
+  background: #e5e7eb; color: #111827;
+  border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  appearance: none; -webkit-appearance: none;
+}
+.score-menu-circle-btn:active { transform: scale(0.93); }
+
+.score-hamburger {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+}
+.score-hamburger span {
+  display: block;
+  width: 16px;
+  height: 2px;
+  background: #111827;
+  border-radius: 2px;
+}
+
+/* ── 점수판 닫기 버튼 (X, 원형) ── */
+.score-close-circle-btn {
+  min-width: 42px; min-height: 42px;
+  width: 42px; height: 42px;
+  padding: 0; border-radius: 999px;
+  background: #374151;
+  color: #f87171;
+  border: 1px solid rgba(248,113,113,0.35);
+  font-size: 18px; font-weight: 900;
+  display: flex; align-items: center; justify-content: center;
+  appearance: none; -webkit-appearance: none;
+  cursor: pointer;
+}
+.score-close-circle-btn:active { transform: scale(0.93); }
+
+/* ── 팀 패널 ── */
 .score-team-bigbox {
   background: #0f172a;
   border-radius: 14px;
@@ -273,7 +322,7 @@ body.score-referee-mode #page-score.active { display: block; }
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(40px, 38vmin, 280px);
+  font-size: clamp(40px, 42vmin, 300px);
   line-height: 0.9;
   font-weight: 900;
   text-align: center;
@@ -281,8 +330,6 @@ body.score-referee-mode #page-score.active { display: block; }
   user-select: none;
   overflow: hidden;
 }
-
-.score-bottom-bar { display: none !important; }
 
 /* ── 사이드 패널 ── */
 .score-side-backdrop {
@@ -315,46 +362,50 @@ body.score-referee-mode #page-score.active { display: block; }
 
 /* ════════════════════════════════
    가로 화면 높이별 반응형 (폴드/소형 폰)
-   실질 높이가 낮을수록 더 압축
 ════════════════════════════════ */
 @media (orientation: landscape) and (max-height: 500px) {
   .score-main-panel {
-    gap: 4px;
+    gap: 3px;
     padding-top: max(5px, env(safe-area-inset-top));
     padding-bottom: max(5px, env(safe-area-inset-bottom));
     border-radius: 10px;
   }
   .score-team-grid { gap: 5px; }
-  .score-center-stack { gap: 6px; }
+  .score-center-stack { gap: 5px; }
+  .score-top-bar { padding: 2px 6px 1px; }
+  .score-bottom-bar { padding: 1px 6px 2px; }
 
-  .score-menu-btn, .score-finish-btn {
+  .score-finish-btn {
     min-height: 32px;
     font-size: 12px;
-    padding: 0 8px;
+    padding: 0 10px;
+    min-width: 80px;
   }
-  .score-menu-btn   { min-width: 56px; }
-  .score-finish-btn { min-width: 72px; }
 
-  .score-swap-btn, .score-undo-icon-btn {
+  .score-swap-btn, .score-undo-icon-btn,
+  .score-menu-circle-btn, .score-close-circle-btn {
     min-width: 34px; min-height: 34px;
     width: 34px; height: 34px;
     font-size: 16px;
   }
 
+  .score-hamburger { gap: 3px; }
+  .score-hamburger span { width: 13px; }
+  .score-close-circle-btn { font-size: 15px; }
+
   .score-team-name { font-size: clamp(12px, 2.4vw, 26px) !important; -webkit-line-clamp: 1; }
-  /* vmin = shorter side = viewport height in landscape → score fills the box */
-  .score-big-number { font-size: clamp(36px, 46vmin, 220px) !important; }
+  .score-big-number { font-size: clamp(36px, 44vmin, 240px) !important; }
   .score-round-big  { font-size: clamp(10px, 1.8vw, 18px); }
 }
 
 @media (orientation: landscape) and (max-height: 360px) {
   .score-main-panel {
-    gap: 3px;
+    gap: 2px;
     padding: max(4px, env(safe-area-inset-top)) 8px max(4px, env(safe-area-inset-bottom));
   }
-  .score-menu-btn, .score-finish-btn { min-height: 28px; font-size: 11px; }
+  .score-finish-btn { min-height: 28px; font-size: 11px; }
   .score-team-name  { font-size: clamp(10px, 2vw, 18px) !important; }
-  .score-big-number { font-size: clamp(30px, 44vmin, 160px) !important; }
+  .score-big-number { font-size: clamp(30px, 42vmin, 180px) !important; }
 }
 
 @media (max-width: 380px) {

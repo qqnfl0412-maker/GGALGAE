@@ -1830,16 +1830,24 @@ async function goNextRound() {
 
   window.participantCanSeeNextRound = false;
 
-  try {
-    const { history: galgeHistory } = computeGalgeFromSnapshots();
-    const galgeLimit = window.galgeCount || 3;
-    if (galgeHistory.length > galgeLimit) {
-      if (confirm(`깔개 수(${galgeLimit}명)를 초과했습니다.\n게임을 종료하시겠습니까?\n\n(취소하면 계속 진행됩니다)`)) {
-        alert("게임이 종료됩니다. 수고하셨습니다!");
-        return;
-      }
-    }
+  const { history: galgeHistory } = computeGalgeFromSnapshots();
+  const galgeLimit = window.galgeCount || 3;
+  if (galgeHistory.length >= galgeLimit) {
+    endHostAction();
+    const modalText = document.getElementById("galgeEndModalText");
+    if (modalText) modalText.innerText = `설정된 깔개 수(${galgeLimit}명)에 도달했습니다.\n게임을 종료하시겠습니까?`;
+    const modal = document.getElementById("galgeEndModal");
+    if (modal) modal.classList.remove("hidden");
+    return;
+  }
 
+  endHostAction();
+  await _advanceToNextRound();
+}
+
+async function _advanceToNextRound() {
+  if (!beginHostAction()) return;
+  try {
     const pendingIndexes = Object.keys(window.matchSaveTimers)
       .filter(key => !!window.matchSaveTimers[key])
       .map(Number);
@@ -1886,6 +1894,36 @@ async function goNextRound() {
   } finally {
     endHostAction();
   }
+}
+
+function closeGalgeEndModal() {
+  const modal = document.getElementById("galgeEndModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+async function galgeEndGame() {
+  closeGalgeEndModal();
+  const lines = window.currentRoundHistoryLines || [];
+  const name = generateRecordName();
+  const galgeEl = document.getElementById("galgeDisplay");
+  const scoreEl = document.getElementById("score");
+  const record = {
+    name,
+    timestamp: Date.now(),
+    roomCode: window.currentRoomCode || "-",
+    galgeHtml: galgeEl ? galgeEl.innerHTML : "",
+    scoreHtml: scoreEl ? scoreEl.innerHTML : "",
+    historyLines: deepCopy(lines)
+  };
+  if (!window.savedRecords) window.savedRecords = [];
+  window.savedRecords.push(record);
+  await saveRoomStateOnly();
+  alert(`게임이 종료됩니다. 수고하셨습니다!\n기록이 "${name}" 이름으로 저장됐어.`);
+}
+
+async function galgeEndContinue() {
+  closeGalgeEndModal();
+  await _advanceToNextRound();
 }
 
 function commitRoundStats() {
