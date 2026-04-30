@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="hidden">
   <meta name="theme-color" content="#111827">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="data:,">
@@ -125,61 +125,36 @@
           <div class="score-ref-shell">
             <div class="score-main-panel" onclick="handleScoreMainPanelClick(event)">
 
-              <!-- 상단: 라운드 표시 (중앙 정렬) -->
-              <div class="score-top-bar">
+              <!-- 2분할: 팀A / 팀B 패널 (전체 화면 채움) -->
+              <button id="scoreTapA" class="score-team-bigbox score-tap-btn score-tap-left" type="button" onclick="addScore(0)">
+                <div id="teamA" class="score-team-name">팀 A</div>
+                <div id="scoreA" class="score-big-number">0</div>
+              </button>
+
+              <button id="scoreTapB" class="score-team-bigbox score-tap-btn score-tap-right" type="button" onclick="addScore(1)">
+                <div id="teamB" class="score-team-name">팀 B</div>
+                <div id="scoreB" class="score-big-number">0</div>
+              </button>
+
+              <!-- 오버레이: 라운드 표시 (상단 중앙) -->
+              <div class="score-overlay-top">
                 <div id="scoreRoundLabel" class="score-round-big">경기를 선택해줘</div>
                 <div id="editModeLabel" class="score-mode-box"></div>
                 <div id="courtNotice" class="court-alert-box"></div>
               </div>
 
-              <!-- 중앙: 팀A | 버튼 스택 | 팀B -->
-              <div class="score-team-grid">
-                <button id="scoreTapA" class="score-team-bigbox score-tap-btn" type="button" onclick="addScore(0)">
-                  <div id="teamA" class="score-team-name">팀 A</div>
-                  <div id="scoreA" class="score-big-number">0</div>
+              <!-- 오버레이: 버튼 스택 (중앙) -->
+              <div class="score-overlay-center">
+                <button id="courtSwapBtn" class="score-swap-btn" type="button" onclick="swapCourtSides()" aria-label="코트 방향 변경" title="코트 방향 변경">↔</button>
+                <button id="scoreUndoBtn" class="score-undo-icon-btn gray" type="button" onclick="undoScore()" aria-label="점수 되돌리기" title="점수 되돌리기">↺</button>
+                <button class="score-menu-circle-btn" type="button" onclick="toggleScoreSidePanel(event)" aria-label="메뉴" title="메뉴">
+                  <span class="score-hamburger"><span></span><span></span><span></span></span>
                 </button>
-
-                <div class="score-center-swap score-center-stack">
-                  <button
-                    id="courtSwapBtn"
-                    class="score-swap-btn"
-                    type="button"
-                    onclick="swapCourtSides()"
-                    aria-label="코트 방향 변경"
-                    title="코트 방향 변경"
-                  >↔</button>
-                  <button
-                    id="scoreUndoBtn"
-                    class="score-undo-icon-btn gray"
-                    type="button"
-                    onclick="undoScore()"
-                    aria-label="점수 되돌리기"
-                    title="점수 되돌리기"
-                  >↺</button>
-                  <button
-                    class="score-menu-circle-btn"
-                    type="button"
-                    onclick="toggleScoreSidePanel(event)"
-                    aria-label="메뉴"
-                    title="메뉴"
-                  ><span class="score-hamburger"><span></span><span></span><span></span></span></button>
-                  <button
-                    class="score-close-circle-btn"
-                    type="button"
-                    onclick="exitScorePage()"
-                    aria-label="점수판 종료"
-                    title="점수판 종료"
-                  >✕</button>
-                </div>
-
-                <button id="scoreTapB" class="score-team-bigbox score-tap-btn" type="button" onclick="addScore(1)">
-                  <div id="teamB" class="score-team-name">팀 B</div>
-                  <div id="scoreB" class="score-big-number">0</div>
-                </button>
+                <button class="score-close-circle-btn" type="button" onclick="exitScorePage()" aria-label="점수판 종료" title="점수판 종료">✕</button>
               </div>
 
-              <!-- 하단: 경기종료 (중앙 정렬, 라운드 표시와 대칭) -->
-              <div class="score-bottom-bar">
+              <!-- 오버레이: 경기종료 (하단 중앙) -->
+              <div class="score-overlay-bottom">
                 <button id="finishMatchBtn" class="danger-btn score-finish-btn" type="button" onclick="finishGame()">경기 종료</button>
               </div>
 

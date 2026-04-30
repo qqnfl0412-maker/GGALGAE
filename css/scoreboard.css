@@ -52,14 +52,8 @@ body.score-referee-mode #page-score.active { display: block; }
     width: 100dvh;
     height: 100dvw;
     min-height: unset;
-    padding: 5px;
+    padding: 4px;
     box-sizing: border-box;
-  }
-
-  body.score-referee-mode .score-main-panel {
-    height: 100%;
-    padding: 4px 8px;
-    gap: 3px;
   }
 
   body.score-referee-mode .score-big-number {
@@ -67,19 +61,19 @@ body.score-referee-mode #page-score.active { display: block; }
   }
 
   body.score-referee-mode .score-team-name {
-    font-size: clamp(12px, 5dvw, 34px) !important;
+    font-size: clamp(12px, 4dvw, 30px) !important;
     -webkit-line-clamp: 1;
   }
 
   body.score-referee-mode .score-round-big {
-    font-size: clamp(10px, 3dvw, 20px) !important;
+    font-size: clamp(10px, 2.8dvw, 20px) !important;
   }
 
   body.score-referee-mode .score-finish-btn {
     min-height: 30px;
-    font-size: clamp(10px, 2.8dvw, 14px);
+    font-size: clamp(10px, 2.6dvw, 14px);
     padding: 0 10px;
-    min-width: 80px;
+    min-width: 76px;
   }
 
   body.score-referee-mode .score-swap-btn,
@@ -93,24 +87,15 @@ body.score-referee-mode #page-score.active { display: block; }
     font-size: 16px;
   }
 
-  body.score-referee-mode .score-hamburger span {
-    width: 13px;
-    height: 2px;
-    gap: 3px;
-  }
-
-  body.score-referee-mode .score-hamburger {
-    gap: 3px;
-  }
-
-  body.score-referee-mode .score-team-grid { gap: 5px; }
-  body.score-referee-mode .score-center-stack { gap: 5px; }
-  body.score-referee-mode .score-top-bar { padding: 3px 6px 2px; }
-  body.score-referee-mode .score-bottom-bar { padding: 2px 6px 3px; }
+  body.score-referee-mode .score-hamburger { gap: 3px; }
+  body.score-referee-mode .score-hamburger span { width: 13px; }
+  body.score-referee-mode .score-overlay-center { gap: 5px; }
+  body.score-referee-mode .score-overlay-top { padding: 5px 14px 4px; }
+  body.score-referee-mode .score-overlay-bottom { padding: 4px 14px 5px; }
 }
 
 /* ════════════════════════════════
-   가로 화면 공통 (PWA / 브라우저 landscape)
+   가로 화면 공통
 ════════════════════════════════ */
 .score-ref-shell {
   width: 100%;
@@ -121,104 +106,169 @@ body.score-referee-mode #page-score.active { display: block; }
   padding: 6px;
   padding-left:  max(6px, env(safe-area-inset-left));
   padding-right: max(6px, env(safe-area-inset-right));
+  padding-top:   max(6px, env(safe-area-inset-top));
+  padding-bottom: max(6px, env(safe-area-inset-bottom));
   position: relative;
   box-sizing: border-box;
   overflow: hidden;
 }
 
+/* ── 메인 패널: 2분할 flex-row + 오버레이 기준점 ── */
 .score-main-panel {
   width: 100%;
   height: 100%;
-  background: #1f2937;
+  background: #111827;
   border-radius: 14px;
-  padding: max(8px, env(safe-area-inset-top)) 10px max(8px, env(safe-area-inset-bottom));
   border: 1px solid rgba(255,255,255,0.08);
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-direction: row;
+  gap: 0;
   position: relative;
   box-sizing: border-box;
   overflow: hidden;
 }
 
-/* ── 상단 바: 라운드 표시 (중앙 정렬) ── */
-.score-top-bar {
+/* ── 팀 패널 (2분할 전체 채움) ── */
+.score-team-bigbox {
+  flex: 1;
+  height: 100%;
+  background: #0f172a;
+  padding: 10px 12px;
+  border: none;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 2px;
-  flex-shrink: 0;
-  padding: 4px 8px 2px;
+  justify-content: flex-start;
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
-/* ── 하단 바: 경기종료 버튼 (중앙 정렬) ── */
-.score-bottom-bar {
+.score-tap-left  { border-radius: 13px 0 0 13px; }
+.score-tap-right { border-radius: 0 13px 13px 0; }
+
+.score-team-bigbox.score-tap-btn {
+  appearance: none; -webkit-appearance: none;
+  cursor: pointer;
+}
+.score-team-bigbox.score-tap-btn:disabled { opacity: 0.65; cursor: default; }
+.score-team-bigbox.score-tap-btn:active   { filter: brightness(1.1); }
+
+.score-team-name {
+  width: 100%;
+  text-align: center;
+  font-size: clamp(14px, 2.4vw, 36px);
+  font-weight: 900;
+  line-height: 1.2;
+  color: #e2e8f0;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex-shrink: 0;
+  /* 상단 오버레이와 겹치지 않게 패딩 */
+  padding-top: 48px;
+}
+
+.score-big-number {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  padding: 2px 8px 4px;
+  font-size: clamp(40px, 40vmin, 320px);
+  line-height: 0.9;
+  font-weight: 900;
+  text-align: center;
+  color: white;
+  user-select: none;
+  overflow: hidden;
+}
+
+/* ════════════════════════════════
+   오버레이 요소들 (absolute positioning)
+════════════════════════════════ */
+
+/* 공통: 오버레이 컨테이너는 클릭 통과, 자식 버튼은 클릭 받음 */
+.score-overlay-top,
+.score-overlay-center,
+.score-overlay-bottom {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* ── 라운드 표시 (상단 중앙) ── */
+.score-overlay-top {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 18px 7px;
+  background: rgba(15, 23, 42, 0.88);
+  border-radius: 0 0 14px 14px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-top: none;
+  white-space: nowrap;
 }
 
 .score-round-big {
   font-size: clamp(13px, 2vw, 24px);
   font-weight: 900;
+  color: white;
   text-align: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.score-finish-btn {
-  min-height: 40px;
-  min-width: 100px;
-  font-size: clamp(12px, 1.6vw, 16px);
-  padding: 0 16px;
-  white-space: nowrap;
 }
 
 .score-mode-box {
-  font-size: clamp(11px, 1.4vw, 14px);
+  font-size: clamp(10px, 1.3vw, 13px);
   font-weight: 800;
   color: #93c5fd;
-  flex-shrink: 0;
-  min-height: 0;
   text-align: center;
 }
 .score-mode-box:empty { display: none; }
 
 .court-alert-box {
-  font-size: clamp(13px, 1.8vw, 20px);
+  font-size: clamp(11px, 1.6vw, 18px);
   font-weight: 900;
   color: #f87171;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  min-height: 0;
+  text-align: center;
 }
 .court-alert-box:empty { display: none; }
 
-/* ── 팀 그리드 ── */
-.score-team-grid {
-  display: grid;
-  grid-template-columns: minmax(0,1fr) auto minmax(0,1fr);
-  gap: 8px;
-  flex: 1;
-  min-height: 0;
-  align-items: stretch;
-}
-
 /* ── 중앙 버튼 스택 ── */
-.score-center-swap { display: flex; align-items: center; justify-content: center; }
-.score-center-stack {
+.score-overlay-center {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
   gap: 8px;
 }
+.score-overlay-center > button { pointer-events: auto; }
+
+/* ── 경기종료 (하단 중앙) ── */
+.score-overlay-bottom {
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 7px 18px 8px;
+  background: rgba(15, 23, 42, 0.88);
+  border-radius: 14px 14px 0 0;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-bottom: none;
+}
+.score-overlay-bottom > button { pointer-events: auto; }
 
 /* ── 교대 버튼 (기존 유지) ── */
 .score-swap-btn {
@@ -228,8 +278,10 @@ body.score-referee-mode #page-score.active { display: block; }
   font-size: 20px; font-weight: 900;
   background: #e5e7eb; color: #111827;
   display: flex; align-items: center; justify-content: center;
+  border: none; cursor: pointer;
 }
 .score-swap-btn:disabled { opacity: 0.55; }
+.score-swap-btn:active { transform: scale(0.93); }
 
 /* ── 되돌리기 버튼 (기존 유지) ── */
 .score-undo-icon-btn {
@@ -237,7 +289,10 @@ body.score-referee-mode #page-score.active { display: block; }
   width: 42px; height: 42px;
   padding: 0; border-radius: 999px;
   font-size: 20px; font-weight: 900;
+  display: flex; align-items: center; justify-content: center;
+  border: none; cursor: pointer;
 }
+.score-undo-icon-btn:active { transform: scale(0.93); }
 
 /* ── 메뉴 버튼 (햄버거 아이콘, 원형) ── */
 .score-menu-circle-btn {
@@ -280,55 +335,13 @@ body.score-referee-mode #page-score.active { display: block; }
 }
 .score-close-circle-btn:active { transform: scale(0.93); }
 
-/* ── 팀 패널 ── */
-.score-team-bigbox {
-  background: #0f172a;
-  border-radius: 14px;
-  padding: 8px;
-  border: 1px solid rgba(255,255,255,0.08);
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  min-width: 0; min-height: 0;
-  overflow: hidden;
-}
-
-.score-team-bigbox.score-tap-btn {
-  appearance: none; -webkit-appearance: none;
-  cursor: pointer;
-  justify-content: center;
-  gap: 6px;
-}
-.score-team-bigbox.score-tap-btn:disabled { opacity: 0.65; cursor: default; }
-.score-team-bigbox.score-tap-btn:active   { transform: scale(0.995); }
-
-.score-team-name {
-  width: 100%;
-  text-align: center;
-  font-size: clamp(14px, 2.4vw, 40px);
-  font-weight: 900;
-  line-height: 1.2;
-  word-break: break-word;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.score-big-number {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: clamp(40px, 42vmin, 300px);
-  line-height: 0.9;
-  font-weight: 900;
-  text-align: center;
-  margin: 0;
-  user-select: none;
-  overflow: hidden;
+/* ── 경기종료 버튼 ── */
+.score-finish-btn {
+  min-height: 40px;
+  min-width: 96px;
+  font-size: clamp(12px, 1.6vw, 16px);
+  padding: 0 16px;
+  white-space: nowrap;
 }
 
 /* ── 사이드 패널 ── */
@@ -364,22 +377,15 @@ body.score-referee-mode #page-score.active { display: block; }
    가로 화면 높이별 반응형 (폴드/소형 폰)
 ════════════════════════════════ */
 @media (orientation: landscape) and (max-height: 500px) {
-  .score-main-panel {
-    gap: 3px;
-    padding-top: max(5px, env(safe-area-inset-top));
-    padding-bottom: max(5px, env(safe-area-inset-bottom));
-    border-radius: 10px;
-  }
-  .score-team-grid { gap: 5px; }
-  .score-center-stack { gap: 5px; }
-  .score-top-bar { padding: 2px 6px 1px; }
-  .score-bottom-bar { padding: 1px 6px 2px; }
+  .score-overlay-center { gap: 5px; }
+  .score-overlay-top  { padding: 5px 14px 4px; }
+  .score-overlay-bottom { padding: 4px 14px 5px; }
 
   .score-finish-btn {
     min-height: 32px;
     font-size: 12px;
     padding: 0 10px;
-    min-width: 80px;
+    min-width: 76px;
   }
 
   .score-swap-btn, .score-undo-icon-btn,
@@ -393,19 +399,20 @@ body.score-referee-mode #page-score.active { display: block; }
   .score-hamburger span { width: 13px; }
   .score-close-circle-btn { font-size: 15px; }
 
-  .score-team-name { font-size: clamp(12px, 2.4vw, 26px) !important; -webkit-line-clamp: 1; }
-  .score-big-number { font-size: clamp(36px, 44vmin, 240px) !important; }
+  .score-team-name {
+    font-size: clamp(12px, 2.2vw, 22px) !important;
+    -webkit-line-clamp: 1;
+    padding-top: 38px;
+  }
+  .score-big-number { font-size: clamp(36px, 42vmin, 240px) !important; }
   .score-round-big  { font-size: clamp(10px, 1.8vw, 18px); }
 }
 
 @media (orientation: landscape) and (max-height: 360px) {
-  .score-main-panel {
-    gap: 2px;
-    padding: max(4px, env(safe-area-inset-top)) 8px max(4px, env(safe-area-inset-bottom));
-  }
-  .score-finish-btn { min-height: 28px; font-size: 11px; }
-  .score-team-name  { font-size: clamp(10px, 2vw, 18px) !important; }
-  .score-big-number { font-size: clamp(30px, 42vmin, 180px) !important; }
+  .score-team-name  { font-size: clamp(10px, 2vw, 16px) !important; padding-top: 32px; }
+  .score-big-number { font-size: clamp(30px, 40vmin, 180px) !important; }
+  .score-overlay-top  { padding: 4px 12px 3px; }
+  .score-overlay-bottom { padding: 3px 12px 4px; }
 }
 
 @media (max-width: 380px) {
