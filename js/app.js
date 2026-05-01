@@ -3439,7 +3439,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     updateBottomNav();
     updateHomePageMode();
     if (window.loginMode === "participant") {
-      await goPage("players");
+      await goPage("round");
     }
   }
 });
