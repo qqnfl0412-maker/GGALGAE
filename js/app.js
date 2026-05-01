@@ -705,12 +705,28 @@ function updateAdminOnlyUI() {
 }
 
 async function saveLogoToServer(base64OrNull) {
-  if (!window.supabaseClient || !window.currentRoomCode) return;
+  if (!window.supabaseClient) return;
   const { error } = await window.supabaseClient
-    .from("match_rooms")
-    .update({ logo_base64: base64OrNull })
-    .eq("room_code", window.currentRoomCode);
+    .from("app_settings")
+    .upsert({ id: "global", logo_base64: base64OrNull });
   if (error) console.error("로고 저장 실패:", error);
+}
+
+async function loadLogoFromServer() {
+  if (!window.supabaseClient) return;
+  const { data } = await window.supabaseClient
+    .from("app_settings")
+    .select("logo_base64")
+    .eq("id", "global")
+    .maybeSingle();
+  if (!data) return;
+  const serverLogo = data.logo_base64 || null;
+  const localLogo  = localStorage.getItem("customLogoBase64") || null;
+  if (serverLogo !== localLogo) {
+    if (serverLogo) localStorage.setItem("customLogoBase64", serverLogo);
+    else localStorage.removeItem("customLogoBase64");
+    loadCustomLogo();
+  }
 }
 
 function resizeImageToBase64(file, maxPx, quality) {
@@ -2368,6 +2384,7 @@ async function loadRoomStateFromServer() {
   updateGalgeCountUI();
 
 
+
   window.currentMatches = (matches || []).map((m, idx) => {
     const local = previousLocalMatches[idx];
 
@@ -3336,6 +3353,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   setupPlayerSync();
   setupModalKeyHandler();
+
+  // 스플래시 중 서버에서 로고 선제 로드 (방 접속 불필요)
+  loadLogoFromServer();
 
   const splash = document.getElementById("splashScreen");
   if (splash) {
