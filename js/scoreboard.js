@@ -182,7 +182,7 @@ async function openScoreFromScorePage(i) {
 
 function swapCourtSides() {
   if (window.currentScoreMatch < 0 || !window.currentMatches[window.currentScoreMatch]) {
-    alert("먼저 경기를 선택해줘.");
+    showAlert("먼저 경기를 선택해줘.");
     return;
   }
   if (window.scoreButtonsLocked || window.scoreInputBusy) return;
@@ -280,7 +280,7 @@ function openScore(i) {
 
 async function addScore(team) {
   if (window.currentScoreMatch < 0 || !window.currentMatches[window.currentScoreMatch]) {
-    alert("먼저 경기를 선택해줘.");
+    showAlert("먼저 경기를 선택해줘.");
     return;
   }
   if (window.scoreButtonsLocked || window.scoreInputBusy) return;
@@ -361,7 +361,7 @@ async function finishGame(shouldExitAfterFinish = true) {
 
   const match = window.currentMatches[window.currentScoreMatch];
   if (match.scoreA === match.scoreB) {
-    alert("동점은 종료할 수 없어.");
+    showAlert("동점은 종료할 수 없어.");
     return;
   }
 
@@ -387,7 +387,7 @@ async function finishWinner() {
   if (match.scoreA > match.scoreB) actualWinnerIndex = 0;
   else if (match.scoreB > match.scoreA) actualWinnerIndex = 1;
   else {
-    alert("동점은 종료할 수 없어.");
+    showAlert("동점은 종료할 수 없어.");
     return;
   }
 
@@ -429,7 +429,7 @@ async function finishWinner() {
   }
 
   if (!window.editMode && !wasFinished) {
-    alert("🏸 승리 팀\n" + match.teams[actualWinnerIndex].join(" / "));
+    await showAlert("🏸 승리 팀\n" + match.teams[actualWinnerIndex].join(" / "), "경기 종료");
   }
 
   window.editMode = false;

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>깔개</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="hidden">
@@ -353,6 +353,35 @@
       <div class="records-modal-actions btn-grid-2" style="margin-top:14px;">
         <button class="danger-btn" type="button" onclick="galgeEndGame()">종료</button>
         <button type="button" onclick="galgeEndContinue()">진행</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 공통 알림 모달 (alert 대체) -->
+  <div id="appAlertModal" class="records-modal hidden">
+    <div class="records-modal-overlay"></div>
+    <div class="records-modal-sheet">
+      <div class="records-modal-title" id="appAlertTitle">알림</div>
+      <div class="records-modal-body">
+        <p id="appAlertMessage" style="margin:0;font-size:15px;line-height:1.6;white-space:pre-line;"></p>
+      </div>
+      <div class="records-modal-actions">
+        <button type="button" id="appAlertOkBtn" onclick="_closeAlert()" style="width:100%;">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 공통 확인 모달 (confirm 대체) -->
+  <div id="appConfirmModal" class="records-modal hidden">
+    <div class="records-modal-overlay" onclick="_closeConfirm(false)"></div>
+    <div class="records-modal-sheet">
+      <div class="records-modal-title" id="appConfirmTitle">확인</div>
+      <div class="records-modal-body">
+        <p id="appConfirmMessage" style="margin:0;font-size:15px;line-height:1.6;white-space:pre-line;"></p>
+      </div>
+      <div class="records-modal-actions btn-grid-2" style="margin-top:14px;">
+        <button type="button" id="appConfirmOkBtn" onclick="_closeConfirm(true)">확인</button>
+        <button class="gray" type="button" onclick="_closeConfirm(false)">취소</button>
       </div>
     </div>
   </div>

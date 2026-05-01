@@ -5,7 +5,7 @@ window.SUPABASE_CONFIG = {
 
 function initSupabase() {
   if (!window.supabase) {
-    alert("Supabase 라이브러리를 불러오지 못했어.");
+    showAlert("Supabase 라이브러리를 불러오지 못했어.");
     return;
   }
 

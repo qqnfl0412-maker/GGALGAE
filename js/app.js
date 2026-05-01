@@ -248,9 +248,53 @@ function combination(arr, k) {
   return result;
 }
 
+let _alertResolve = null;
+let _confirmResolve = null;
+
+function showAlert(message, title) {
+  return new Promise(resolve => {
+    _alertResolve = resolve;
+    document.getElementById("appAlertTitle").textContent = title || "알림";
+    document.getElementById("appAlertMessage").textContent = message;
+    document.getElementById("appAlertModal").classList.remove("hidden");
+    document.getElementById("appAlertOkBtn").focus();
+  });
+}
+
+function _closeAlert() {
+  document.getElementById("appAlertModal").classList.add("hidden");
+  if (_alertResolve) { _alertResolve(); _alertResolve = null; }
+}
+
+function showConfirm(message, title) {
+  return new Promise(resolve => {
+    _confirmResolve = resolve;
+    document.getElementById("appConfirmTitle").textContent = title || "확인";
+    document.getElementById("appConfirmMessage").textContent = message;
+    document.getElementById("appConfirmModal").classList.remove("hidden");
+    document.getElementById("appConfirmOkBtn").focus();
+  });
+}
+
+function _closeConfirm(result) {
+  document.getElementById("appConfirmModal").classList.add("hidden");
+  if (_confirmResolve) { _confirmResolve(result); _confirmResolve = null; }
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter") {
+    if (!document.getElementById("appAlertModal").classList.contains("hidden")) { _closeAlert(); return; }
+    if (!document.getElementById("appConfirmModal").classList.contains("hidden")) { _closeConfirm(true); return; }
+  }
+  if (e.key === "Escape") {
+    if (!document.getElementById("appAlertModal").classList.contains("hidden")) { _closeAlert(); return; }
+    if (!document.getElementById("appConfirmModal").classList.contains("hidden")) { _closeConfirm(false); return; }
+  }
+});
+
 function ensureHost(actionName = "이 기능") {
   if (!window.isHost) {
-    alert(`${actionName}은(는) 방장만 사용할 수 있어.`);
+    showAlert(`${actionName}은(는) 방장만 사용할 수 있어.`);
     return false;
   }
   return true;
@@ -717,7 +761,7 @@ function loadCustomLogo() {
 async function changeLogoImage(file) {
   if (!file) return;
   if (file.size > 10 * 1024 * 1024) {
-    alert("이미지가 너무 커. 10MB 이하 파일을 사용해줘.");
+    showAlert("이미지가 너무 커. 10MB 이하 파일을 사용해줘.");
     return;
   }
   const previewEl = document.getElementById("logoPreview");
@@ -730,7 +774,7 @@ async function changeLogoImage(file) {
     await saveLogoToServer(b64);
     if (previewEl) previewEl.innerText = "저장됐어. 방에 접속한 모든 기기에 반영돼.";
   } catch (err) {
-    alert("이미지 처리 실패: " + err);
+    showAlert("이미지 처리 실패: " + err);
     if (previewEl) previewEl.innerText = "";
   }
 }
@@ -865,10 +909,10 @@ async function resetAll() {
 
   try {
     if (!window.currentRoomCode) {
-      alert("먼저 방에 연결해줘.");
+      showAlert("먼저 방에 연결해줘.");
       return;
     }
-    if (!confirm("현재 방 상태를 전체 초기화할까요?")) return;
+    if (!await showConfirm("현재 방 상태를 전체 초기화할까요?")) return;
 
     resetLocalStateOnly();
 
@@ -892,7 +936,7 @@ async function resetAll() {
 
     if (roomError) {
       console.error(roomError);
-      alert("방 초기화 저장 실패");
+      showAlert("방 초기화 저장 실패");
       return;
     }
 
@@ -903,20 +947,20 @@ async function resetAll() {
 
     if (deleteError) {
       console.error(deleteError);
-      alert("경기 데이터 삭제 실패");
+      showAlert("경기 데이터 삭제 실패");
       return;
     }
 
-    alert("전체 초기화했어.");
+    showAlert("전체 초기화했어.");
   } finally {
     endHostAction();
   }
 }
 
 async function deleteRoom() {
-  if (!window.isAdmin) { alert("관리자만 방을 삭제할 수 있어."); return; }
-  if (!window.currentRoomCode) { alert("연결된 방이 없어."); return; }
-  if (!confirm(`방 "${window.currentRoomCode}"을 DB에서 완전히 삭제할까요?\n이 작업은 되돌릴 수 없어.`)) return;
+  if (!window.isAdmin) { showAlert("관리자만 방을 삭제할 수 있어."); return; }
+  if (!window.currentRoomCode) { showAlert("연결된 방이 없어."); return; }
+  if (!await showConfirm(`방 "${window.currentRoomCode}"을 DB에서 완전히 삭제할까요?\n이 작업은 되돌릴 수 없어.`)) return;
   if (!beginHostAction()) return;
 
   try {
@@ -924,7 +968,7 @@ async function deleteRoom() {
     const { error } = await window.supabaseClient.from("match_rooms").delete().eq("room_code", window.currentRoomCode);
 
     if (error) {
-      alert("방 삭제 실패: " + (error.message || "알 수 없는 오류"));
+      showAlert("방 삭제 실패: " + (error.message || "알 수 없는 오류"));
       return;
     }
 
@@ -945,7 +989,7 @@ async function deleteRoom() {
     renderMatches();
     updateScore();
 
-    alert("방을 삭제했어.");
+    showAlert("방을 삭제했어.");
   } finally {
     endHostAction();
   }
@@ -954,7 +998,7 @@ async function deleteRoom() {
 let _pendingDeleteRoomCode = null;
 
 function deleteRoomByCode(code) {
-  if (!window.isAdmin) { alert("관리자만 방을 삭제할 수 있어."); return; }
+  if (!window.isAdmin) { showAlert("관리자만 방을 삭제할 수 있어."); return; }
   _pendingDeleteRoomCode = code;
   const text = document.getElementById("deleteRoomModalText");
   if (text) text.textContent = `방 "${code}"을 삭제하시겠습니까?`;
@@ -976,7 +1020,7 @@ async function confirmDeleteRoomByCode() {
   try {
     await window.supabaseClient.from("match_round_matches").delete().eq("room_code", code);
     const { error } = await window.supabaseClient.from("match_rooms").delete().eq("room_code", code);
-    if (error) { alert("방 삭제 실패: " + (error.message || "알 수 없는 오류")); return; }
+    if (error) { showAlert("방 삭제 실패: " + (error.message || "알 수 없는 오류")); return; }
 
     if (window.currentRoomCode === code) {
       const url = new URL(window.location.href);
@@ -996,7 +1040,7 @@ async function confirmDeleteRoomByCode() {
     }
 
     loadRoomList();
-    alert("방을 삭제했어.");
+    showAlert("방을 삭제했어.");
   } finally {
     endHostAction();
   }
@@ -1012,12 +1056,12 @@ async function addFixedTeam() {
     const r = parseInt(document.getElementById("fixedRound").value, 10);
 
     if (!p1 || !p2 || !r) {
-      alert("선수 2명과 라운드를 입력해줘.");
+      showAlert("선수 2명과 라운드를 입력해줘.");
       return;
     }
 
     if (p1 === p2) {
-      alert("같은 선수끼리는 고정팀 불가");
+      showAlert("같은 선수끼리는 고정팀 불가");
       return;
     }
 
@@ -1484,7 +1528,7 @@ async function replaceAllMatchesOnServer() {
 
   if (deleteError) {
     console.error(deleteError);
-    alert("기존 경기 삭제 실패");
+    showAlert("기존 경기 삭제 실패");
     return false;
   }
 
@@ -1510,7 +1554,7 @@ async function replaceAllMatchesOnServer() {
 
   if (error) {
     console.error(error);
-    alert("새 경기 저장 실패");
+    showAlert("새 경기 저장 실패");
     return false;
   }
 
@@ -1694,13 +1738,13 @@ async function addPenalty() {
 
   try {
     if (!window.roundLocked) {
-      alert("진행 중인 라운드가 없어서 핸디캡 패를 추가할 수 없어.");
+      showAlert("진행 중인 라운드가 없어서 핸디캡 패를 추가할 수 없어.");
       return;
     }
 
     const finishedCount = window.currentMatches.filter(m => m.finished).length;
     if (!window.restoredCompletedRound && window.neededResults > 0 && finishedCount >= window.neededResults) {
-      alert("이미 완료된 라운드야. 다음 라운드를 시작하거나 이전 완료 라운드로 복구 후 수정해줘.");
+      showAlert("이미 완료된 라운드야. 다음 라운드를 시작하거나 이전 완료 라운드로 복구 후 수정해줘.");
       return;
     }
 
@@ -1725,7 +1769,7 @@ async function makeMatch(skipHostBusyCheck = false, skipHostCheck = false) {
 
   try {
     if (!window.currentRoomCode) {
-      alert("먼저 방에 연결해줘.");
+      showAlert("먼저 방에 연결해줘.");
       return;
     }
 
@@ -1743,7 +1787,7 @@ async function makeMatch(skipHostBusyCheck = false, skipHostCheck = false) {
       if (window.neededResults > 0 && finishedCount >= window.neededResults) {
         window.roundLocked = false;
       } else {
-        alert("현재 라운드가 아직 끝나지 않았어.");
+        showAlert("현재 라운드가 아직 끝나지 않았어.");
         return;
       }
     }
@@ -1757,13 +1801,13 @@ async function makeMatch(skipHostBusyCheck = false, skipHostCheck = false) {
     if (window.players.length < 4) {
       const matchEl = document.getElementById("match");
       if (matchEl) matchEl.innerHTML = "<b>경기 종료</b>";
-      alert("경기할 인원이 부족해.");
+      showAlert("경기할 인원이 부족해.");
       return;
     }
 
     const plan = chooseBestSchedule(window.players);
     if (!plan || !plan.matches.length) {
-      alert("대진 생성 실패");
+      showAlert("대진 생성 실패");
       return;
     }
 
@@ -1801,12 +1845,12 @@ async function makeMatch(skipHostBusyCheck = false, skipHostCheck = false) {
 
 async function requestNextRoundFromParticipant() {
   if (!window.supabaseClient || !window.currentRoomCode) {
-    alert("방 연결이 필요해.");
+    showAlert("방 연결이 필요해.");
     return;
   }
 
   if (!window.participantCanSeeNextRound || !isCurrentRoundCompleted()) {
-    alert("지금은 다음 라운드를 요청할 수 없어.");
+    showAlert("지금은 다음 라운드를 요청할 수 없어.");
     return;
   }
 
@@ -1817,12 +1861,12 @@ async function requestNextRoundFromParticipant() {
 
   await saveRoomStateOnly();
   setTimeout(() => loadRoomStateFromServer(), 150);
-  alert("다음 라운드 요청을 보냈어.");
+  showAlert("다음 라운드 요청을 보냈어.");
 }
 
 async function goNextRound() {
   if (!isCurrentRoundCompleted()) {
-    alert("현재 라운드가 아직 끝나지 않았어.");
+    showAlert("현재 라운드가 아직 끝나지 않았어.");
     return;
   }
 
@@ -1918,7 +1962,7 @@ async function galgeEndGame() {
   if (!window.savedRecords) window.savedRecords = [];
   window.savedRecords.push(record);
   await saveRoomStateOnly();
-  alert(`게임이 종료됩니다. 수고하셨습니다!\n기록이 "${name}" 이름으로 저장됐어.`);
+  showAlert(`게임이 종료됩니다. 수고하셨습니다!\n기록이 "${name}" 이름으로 저장됐어.`);
 }
 
 async function galgeEndContinue() {
@@ -2061,7 +2105,7 @@ async function undoRound() {
       message = `현재 Round ${window.round} 진행 내용은 버리고, 이전 완료 라운드로 복구할까요?`;
     }
 
-    if (!confirm(message)) return;
+    if (!await showConfirm(message)) return;
 
     markRoomReloadSuppressed(4000);
 
@@ -2108,7 +2152,7 @@ async function undoRound() {
       await saveRoomStateOnly();
       setTimeout(() => loadRoomStateFromServer(), 150);
 
-      alert("0라운드 대기 상태로 복구했어.");
+      showAlert("0라운드 대기 상태로 복구했어.");
       return;
     }
 
@@ -2158,7 +2202,7 @@ async function undoRound() {
     await saveRoomStateOnly();
     setTimeout(() => loadRoomStateFromServer(), 150);
 
-    alert(`Round ${window.round} 상태로 복구했어.`);
+    showAlert(`Round ${window.round} 상태로 복구했어.`);
   } finally {
     endHostAction();
   }
@@ -2390,7 +2434,7 @@ async function loadRoomStateFromServer() {
   maybeHandleParticipantNextRoundRequest();
 
   if (scorePageStale) {
-    alert("종료된 경기입니다.");
+    showAlert("종료된 경기입니다.");
     exitScorePage();
   }
 }
@@ -2509,7 +2553,7 @@ async function handleStart() {
   const val = input ? input.value.trim() : "";
 
   if (!val) {
-    alert("코드를 입력해줘.");
+    showAlert("코드를 입력해줘.");
     return;
   }
 
@@ -2539,7 +2583,7 @@ async function handleStart() {
   }
 
   if (!window.supabaseClient) initSupabase();
-  if (!window.supabaseClient) { alert("서버 연결 실패"); return; }
+  if (!window.supabaseClient) { showAlert("서버 연결 실패"); return; }
 
   const roomCode = val.toUpperCase();
   const { data, error } = await window.supabaseClient
@@ -2549,7 +2593,7 @@ async function handleStart() {
     .maybeSingle();
 
   if (error || !data) {
-    alert("방을 찾지 못했어.");
+    showAlert("방을 찾지 못했어.");
     return;
   }
 
@@ -2588,7 +2632,7 @@ async function createRoom() {
     updateHomePageMode();
     updateBottomNav();
     updateRoomInfo();
-    alert("관리자 권한이 부여됐어.");
+    showAlert("관리자 권한이 부여됐어.");
     return;
   }
 
@@ -2599,7 +2643,7 @@ async function createRoom() {
     const roomCode = inputVal || randomCode(6);
 
     if (!/^[A-Z0-9]{4,10}$/.test(roomCode)) {
-      alert("방코드는 영문/숫자 4~10자리로 입력해줘.");
+      showAlert("방코드는 영문/숫자 4~10자리로 입력해줘.");
       return;
     }
 
@@ -2610,7 +2654,7 @@ async function createRoom() {
       .maybeSingle();
 
     if (existing) {
-      alert(`방코드 "${roomCode}"는 이미 사용 중이야. 다른 코드를 입력해줘.`);
+      showAlert(`방코드 "${roomCode}"는 이미 사용 중이야. 다른 코드를 입력해줘.`);
       return;
     }
 
@@ -2633,7 +2677,7 @@ async function createRoom() {
 
     if (error) {
       console.error("방 생성 실패 상세:", error);
-      alert("방 생성 실패: " + (error.message || "알 수 없는 오류"));
+      showAlert("방 생성 실패: " + (error.message || "알 수 없는 오류"));
       return;
     }
 
@@ -2652,7 +2696,7 @@ async function createRoom() {
     await subscribeRoomRealtime();
     await loadRoomStateFromServer();
 
-    alert(
+    showAlert(
       `방 생성 완료: ${roomCode}\n\n` +
       `참가자에게는 "참가자 링크 복사"를 공유해줘.\n` +
       `방장 링크는 방장만 보관해줘.`
@@ -2679,13 +2723,13 @@ async function joinRoom() {
     updateHomePageMode();
     updateBottomNav();
     updateRoomInfo();
-    alert("관리자 권한이 부여됐어.");
+    showAlert("관리자 권한이 부여됐어.");
     return;
   }
 
   const roomCode = rawJoin.toUpperCase();
   if (!roomCode) {
-    alert("방코드를 입력해줘.");
+    showAlert("방코드를 입력해줘.");
     return;
   }
 
@@ -2697,7 +2741,7 @@ async function joinRoom() {
 
   if (error || !data) {
     console.error("방 조회 실패:", error, data);
-    alert("방을 찾지 못했어.");
+    showAlert("방을 찾지 못했어.");
     return;
   }
 
@@ -2718,7 +2762,7 @@ async function joinRoom() {
   await subscribeRoomRealtime();
   await loadRoomStateFromServer();
 
-  alert(window.isHost ? "방장으로 입장했어." : "방에 입장했어.");
+  showAlert(window.isHost ? "방장으로 입장했어." : "방에 입장했어.");
 }
 
 function updateRoomInfo() {
@@ -2785,17 +2829,17 @@ async function copyToClipboard(text) {
 
 async function copyPlayerLink() {
   const link = getPlayerRoomURL();
-  if (!link) { alert("먼저 방에 연결해줘."); return; }
+  if (!link) { showAlert("먼저 방에 연결해줘."); return; }
   const ok = await copyToClipboard(link);
-  if (ok) alert("참가자 링크를 복사했어.");
+  if (ok) showAlert("참가자 링크를 복사했어.");
 }
 
 async function copyHostLink() {
-  if (!window.isHost) { alert("방장 링크는 방장만 복사할 수 있어."); return; }
+  if (!window.isHost) { showAlert("방장 링크는 방장만 복사할 수 있어."); return; }
   const link = getHostRoomURL();
-  if (!link) { alert("방장 정보가 없어."); return; }
+  if (!link) { showAlert("방장 정보가 없어."); return; }
   const ok = await copyToClipboard(link);
-  if (ok) alert("방장 링크를 복사했어.");
+  if (ok) showAlert("방장 링크를 복사했어.");
 }
 
 
@@ -2998,7 +3042,7 @@ async function confirmPlayerCreate() {
 
   const nextName = textInput.value.trim();
   if (!nextName) {
-    alert("이름을 입력해줘.");
+    showAlert("이름을 입력해줘.");
     textInput.focus();
     return;
   }
@@ -3007,7 +3051,7 @@ async function confirmPlayerCreate() {
     if (i === slot) continue;
     const other = document.getElementById("p" + i);
     if (other && other.value.trim() === nextName) {
-      alert("같은 이름이 이미 있어.");
+      showAlert("같은 이름이 이미 있어.");
       textInput.focus();
       return;
     }
@@ -3033,7 +3077,7 @@ async function confirmPlayerEdit() {
   const newName = textInput.value.trim();
 
   if (!newName) {
-    alert("이름을 입력해줘.");
+    showAlert("이름을 입력해줘.");
     textInput.focus();
     return;
   }
@@ -3042,7 +3086,7 @@ async function confirmPlayerEdit() {
     if (i === slot) continue;
     const other = document.getElementById("p" + i);
     if (other && other.value.trim() === newName) {
-      alert("같은 이름이 이미 있어.");
+      showAlert("같은 이름이 이미 있어.");
       textInput.focus();
       return;
     }
@@ -3147,11 +3191,11 @@ function updateGalgeCountUI() {
 }
 
 function setGalgeCountUI() {
-  if (!window.isHost) { alert("방장만 변경할 수 있어."); return; }
+  if (!window.isHost) { showAlert("방장만 변경할 수 있어."); return; }
   const input = document.getElementById("galgeCountInput");
   const val = input ? input.value.trim() : "";
   const n = val === "" ? 3 : parseInt(val, 10);
-  if (!n || n < 1 || n > 20) { alert("1~20 사이의 숫자를 입력해줘."); return; }
+  if (!n || n < 1 || n > 20) { showAlert("1~20 사이의 숫자를 입력해줘."); return; }
   window.galgeCount = n;
   updateGalgeCountUI();
   saveRoomStateOnly();
@@ -3248,11 +3292,11 @@ function updateGalgeList() {
 }
 
 function setEliminationLossesUI() {
-  if (!window.isHost) { alert("방장만 변경할 수 있어."); return; }
+  if (!window.isHost) { showAlert("방장만 변경할 수 있어."); return; }
   const input = document.getElementById("eliminationLossesInput");
   const val = input ? input.value.trim() : "";
   const n = val === "" ? 3 : parseInt(val, 10);
-  if (!n || n < 1 || n > 20) { alert("1~20 사이의 숫자를 입력해줘."); return; }
+  if (!n || n < 1 || n > 20) { showAlert("1~20 사이의 숫자를 입력해줘."); return; }
   window.eliminationLosses = n;
   updateEliminationLossesUI();
   saveRoomStateOnly();
@@ -3377,14 +3421,14 @@ function generateRecordName() {
   return `${base}-${same.length}`;
 }
 
-function saveCurrentRecord() {
+async function saveCurrentRecord() {
   if (!window.isHost && !window.isAdmin) {
-    alert("방장 또는 관리자만 기록을 저장할 수 있어.");
+    showAlert("방장 또는 관리자만 기록을 저장할 수 있어.");
     return;
   }
   const lines = window.currentRoundHistoryLines || [];
   if (!lines.length) {
-    if (!confirm("기록이 없어. 그래도 저장할까?")) return;
+    if (!await showConfirm("기록이 없어. 그래도 저장할까?")) return;
   }
   const name = generateRecordName();
   const galgeEl = document.getElementById("galgeDisplay");
@@ -3400,7 +3444,7 @@ function saveCurrentRecord() {
   if (!window.savedRecords) window.savedRecords = [];
   window.savedRecords.push(record);
   saveRoomStateOnly();
-  alert(`"${name}" 이름으로 저장됐어.`);
+  showAlert(`"${name}" 이름으로 저장됐어.`);
 }
 
 function showRecordsList() {
@@ -3470,7 +3514,7 @@ function closeDeleteRecordModal() {
 function confirmDeleteRecord() {
   const pw = (document.getElementById("deleteRecordPwInput")?.value || "").trim();
   if (pw !== "j1037") {
-    alert("비밀번호가 틀렸어.");
+    showAlert("비밀번호가 틀렸어.");
     return;
   }
   const record = window._currentViewingRecord;
@@ -3534,7 +3578,7 @@ async function joinRoomByCode(code) {
     .eq("room_code", code)
     .maybeSingle();
 
-  if (error || !data) { alert("방을 찾지 못했어."); return; }
+  if (error || !data) { showAlert("방을 찾지 못했어."); return; }
 
   window.currentRoomCode  = code;
   window.currentHostCode  = data.host_code || "";
