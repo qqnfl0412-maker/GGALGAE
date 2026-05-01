@@ -429,3 +429,35 @@ body.score-referee-mode #page-score.active { display: block; }
 @media (max-width: 380px) {
   .score-side-panel { width: min(260px, 84vw); }
 }
+
+/* ════════════════════════════════
+   점수판 팝업 가로 회전
+   (세로 기기에서 90도 회전된 점수판과 동일한 좌표계 적용)
+════════════════════════════════ */
+@media (orientation: portrait) {
+  body.score-referee-mode #appAlertModal,
+  body.score-referee-mode #appConfirmModal {
+    width: 100dvh;
+    height: 100dvw;
+    position: fixed;
+    inset: auto;
+    top: calc((100dvh - 100dvw) / 2);
+    left: calc((100dvw - 100dvh) / 2);
+    transform: rotate(90deg);
+    transform-origin: center center;
+    z-index: 600;
+  }
+
+  body.score-referee-mode #appAlertModal .records-modal-sheet,
+  body.score-referee-mode #appConfirmModal .records-modal-sheet {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    max-width: 480px;
+    max-height: 85%;
+    margin: 0 auto;
+    width: auto;
+  }
+}
