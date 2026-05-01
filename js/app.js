@@ -1339,7 +1339,8 @@ function chooseBestSchedule(activePlayers) {
             scoreA: 0,
             scoreB: 0,
             scoreHistory: [],
-            winnerIndex: null
+            winnerIndex: null,
+            scoreSeq: 0
           }))
         };
       }
@@ -1483,34 +1484,71 @@ async function saveSingleMatchToServer(index) {
   if (!window.supabaseClient || !window.currentRoomCode || !window.currentMatches[index]) return;
 
   const match = window.currentMatches[index];
-  const payload = {
-    room_code: window.currentRoomCode,
-    round_no: window.round,
-    match_index: index,
-    team_a: deepCopy(match.teams[0]),
-    team_b: deepCopy(match.teams[1]),
-    score_a: match.scoreA,
-    score_b: match.scoreB,
-    finished: !!match.finished,
-    winner_index: match.winnerIndex,
-    score_history: deepCopy(match.scoreHistory || [])
-  };
+  const currentSeq = match.scoreSeq ?? 0;
+  const nextSeq = currentSeq + 1;
 
   markMatchesReloadSuppressed(700);
 
-  const { data, error } = await window.supabaseClient
-    .from("match_round_matches")
-    .upsert(payload, { onConflict: "room_code,round_no,match_index" })
-    .select();
+  if (match.dbId) {
+    const { data, error } = await window.supabaseClient
+      .from("match_round_matches")
+      .update({
+        score_a: match.scoreA,
+        score_b: match.scoreB,
+        finished: !!match.finished,
+        winner_index: match.winnerIndex,
+        score_history: deepCopy(match.scoreHistory || []),
+        score_seq: nextSeq
+      })
+      .eq("id", match.dbId)
+      .eq("score_seq", currentSeq)
+      .select();
 
-  if (error) {
-    console.error(error);
-    setSyncStatus("경기 저장 실패");
-    return;
-  }
+    if (error) {
+      console.error(error);
+      setSyncStatus("경기 저장 실패");
+      return;
+    }
 
-  if (data && data[0] && window.currentMatches[index]) {
-    window.currentMatches[index].dbId = data[0].id;
+    if (!data || data.length === 0) {
+      // 다른 사람이 먼저 저장함 → 서버 상태로 복원
+      window.localMatchDirtyUntil[index] = 0;
+      setSyncStatus("이전 입력으로 복원 중");
+      await loadRoomStateFromServer();
+      return;
+    }
+
+    if (window.currentMatches[index]) {
+      window.currentMatches[index].scoreSeq = nextSeq;
+    }
+  } else {
+    const { data, error } = await window.supabaseClient
+      .from("match_round_matches")
+      .upsert({
+        room_code: window.currentRoomCode,
+        round_no: window.round,
+        match_index: index,
+        team_a: deepCopy(match.teams[0]),
+        team_b: deepCopy(match.teams[1]),
+        score_a: match.scoreA,
+        score_b: match.scoreB,
+        finished: !!match.finished,
+        winner_index: match.winnerIndex,
+        score_history: deepCopy(match.scoreHistory || []),
+        score_seq: nextSeq
+      }, { onConflict: "room_code,round_no,match_index" })
+      .select();
+
+    if (error) {
+      console.error(error);
+      setSyncStatus("경기 저장 실패");
+      return;
+    }
+
+    if (data && data[0] && window.currentMatches[index]) {
+      window.currentMatches[index].dbId = data[0].id;
+      window.currentMatches[index].scoreSeq = nextSeq;
+    }
   }
 
   setSyncStatus("실시간 반영 중");
@@ -1566,7 +1604,8 @@ async function replaceAllMatchesOnServer() {
     score_b: m.scoreB,
     finished: !!m.finished,
     winner_index: m.winnerIndex,
-    score_history: deepCopy(m.scoreHistory || [])
+    score_history: deepCopy(m.scoreHistory || []),
+    score_seq: 0
   }));
 
   const { data, error } = await window.supabaseClient
@@ -1581,7 +1620,10 @@ async function replaceAllMatchesOnServer() {
   }
 
   data.forEach((row, idx) => {
-    if (window.currentMatches[idx]) window.currentMatches[idx].dbId = row.id;
+    if (window.currentMatches[idx]) {
+      window.currentMatches[idx].dbId = row.id;
+      window.currentMatches[idx].scoreSeq = 0;
+    }
   });
 
   return true;
@@ -2279,6 +2321,9 @@ function buildHistoryFromServerState(room, matches) {
 function shouldKeepLocalMatch(local, serverRow, idx) {
   if (!local || !serverRow) return false;
 
+  // 서버 버전이 로컬보다 높으면 서버가 이미 앞서 있음 → 로컬 버림
+  if ((serverRow.score_seq ?? 0) > (local.scoreSeq ?? 0)) return false;
+
   const pendingSave = !!window.matchSaveTimers[idx];
   const dirty = Date.now() < (window.localMatchDirtyUntil[idx] || 0);
 
@@ -2397,7 +2442,8 @@ async function loadRoomStateFromServer() {
         scoreA: local.scoreA,
         scoreB: local.scoreB,
         scoreHistory: deepCopy(local.scoreHistory || []),
-        winnerIndex: local.winnerIndex
+        winnerIndex: local.winnerIndex,
+        scoreSeq: local.scoreSeq ?? (m.score_seq || 0)
       };
     }
 
@@ -2409,7 +2455,8 @@ async function loadRoomStateFromServer() {
       scoreA: m.score_a || 0,
       scoreB: m.score_b || 0,
       scoreHistory: deepCopy(m.score_history || []),
-      winnerIndex: typeof m.winner_index === "number" ? m.winner_index : null
+      winnerIndex: typeof m.winner_index === "number" ? m.winner_index : null,
+      scoreSeq: m.score_seq || 0
     };
   });
 
