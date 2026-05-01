@@ -824,6 +824,9 @@ async function goPage(name) {
     updateScoreSidePanel();
   }
 
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  if (themeColor) themeColor.content = (name === "score") ? "#111827" : "#ffffff";
+
   updateFloatingRoomStatus();
   updateScoreOrientationGuide();
   renderScoreMatchList();

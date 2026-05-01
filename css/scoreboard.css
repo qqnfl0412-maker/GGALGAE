@@ -57,7 +57,7 @@ body.score-referee-mode #page-score.active { display: block; }
   }
 
   body.score-referee-mode .score-big-number {
-    font-size: clamp(50px, 50dvw, 260px) !important;
+    font-size: clamp(65px, 56dvw, 310px) !important;
   }
 
   body.score-referee-mode .score-team-name {
@@ -145,8 +145,21 @@ body.score-referee-mode #page-score.active { display: block; }
   box-sizing: border-box;
 }
 
-.score-tap-left  { border-radius: 13px 0 0 13px; border-right: 2px solid rgba(255,255,255,0.18); }
+.score-tap-left  { border-radius: 13px 0 0 13px; }
 .score-tap-right { border-radius: 0 13px 13px 0; }
+
+/* ── 팀 구분선 (버튼 border-right 대신 독립 div 사용) ── */
+.score-center-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  background: rgba(255,255,255,0.2);
+  pointer-events: none;
+  z-index: 5;
+}
 
 .score-team-bigbox.score-tap-btn {
   appearance: none; -webkit-appearance: none;
@@ -179,11 +192,14 @@ body.score-referee-mode #page-score.active { display: block; }
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(50px, 46vmin, 360px);
-  line-height: 0.9;
+  font-size: clamp(70px, 54vmin, 440px);
+  line-height: 0.85;
   font-weight: 900;
+  font-stretch: condensed;
+  letter-spacing: -0.04em;
   text-align: center;
   color: white;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.25);
   user-select: none;
   overflow: hidden;
 }
@@ -399,13 +415,13 @@ body.score-referee-mode #page-score.active { display: block; }
     -webkit-line-clamp: 1;
     padding-top: 38px;
   }
-  .score-big-number { font-size: clamp(44px, 46vmin, 260px) !important; }
+  .score-big-number { font-size: clamp(54px, 52vmin, 290px) !important; }
   .score-round-big  { font-size: clamp(10px, 1.8vw, 18px); }
 }
 
 @media (orientation: landscape) and (max-height: 360px) {
   .score-team-name  { font-size: clamp(10px, 2vw, 16px) !important; padding-top: 32px; }
-  .score-big-number { font-size: clamp(36px, 44vmin, 195px) !important; }
+  .score-big-number { font-size: clamp(44px, 50vmin, 215px) !important; }
   .score-overlay-top  { padding: 4px 12px 3px; }
   .score-overlay-bottom { padding: 3px 12px 4px; }
 }

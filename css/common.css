@@ -43,6 +43,7 @@ body {
   background: #ffffff;
   border-bottom: 1px solid rgba(0,0,0,0.07);
   padding: 14px 18px 10px;
+  padding-top: max(14px, calc(env(safe-area-inset-top) + 6px));
   box-shadow: 0 1px 8px rgba(0,0,0,0.06);
 }
 
