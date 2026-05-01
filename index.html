@@ -195,7 +195,7 @@
 
       <section id="page-settings" class="page">
         <div class="card hostOnly">
-          <h3>고정 팀 설정 <span class="room-badge">방장 전용</span></h3>
+          <h3>고정 팀 <span class="room-badge">방장 전용</span></h3>
           <div class="input-grid-2" style="margin-bottom: 8px;">
             <select id="fixed1" onchange="updateFixedTeamDropdowns()"><option value="">선수 1 선택</option></select>
             <select id="fixed2" onchange="updateFixedTeamDropdowns()"><option value="">선수 2 선택</option></select>
@@ -208,7 +208,7 @@
         </div>
 
         <div class="card hostOnly">
-          <h3>핸디캡 패 추가 <span class="room-badge">방장 전용</span></h3>
+          <h3>패배 추가 <span class="room-badge">방장 전용</span></h3>
           <div class="input-grid-2">
             <select id="penaltyPlayer"></select>
             <button type="button" onclick="addPenalty()">핸디캡 패 +1</button>
@@ -216,15 +216,7 @@
         </div>
 
         <div class="card hostOnly">
-          <h3>방장 전용 옵션</h3>
-          <div class="btn-grid-1">
-            <button class="danger-btn" type="button" onclick="resetAll()">전체 초기화</button>
-          </div>
-        </div>
-
-        <div class="card hostOnly">
           <h3>게임 종료</h3>
-          <div class="small" style="margin-bottom: 8px;">현재 기록 탭 내용을 날짜 이름으로 저장해.</div>
           <div class="btn-grid-1">
             <button class="secondary" type="button" onclick="saveCurrentRecord()">기록 저장</button>
           </div>
@@ -235,6 +227,20 @@
           <div class="btn-grid-1">
             <button class="secondary" type="button" onclick="showRecordsList()">기록</button>
           </div>
+        </div>
+
+        <div class="card hostOnly">
+          <div class="btn-grid-1">
+            <button class="danger-btn" type="button" onclick="resetAll()">전체 초기화</button>
+          </div>
+        </div>
+
+        <div class="card adminOnly hidden-admin">
+          <h3>방 관리 <span class="room-badge">관리자 전용</span></h3>
+          <div class="btn-grid-1" style="margin-bottom:10px;">
+            <button class="secondary" type="button" onclick="loadRoomList()">방 목록 불러오기</button>
+          </div>
+          <div id="roomListContainer"></div>
         </div>
 
         <div class="card adminOnly hidden-admin">
@@ -248,30 +254,6 @@
             <button class="secondary" type="button" onclick="resetLogoImage()">기본 로고로 초기화</button>
           </div>
           <div id="logoPreview" class="small" style="text-align:center;"></div>
-        </div>
-
-        <div class="card adminOnly hidden-admin">
-          <h3>앱 아이콘 생성 <span class="room-badge">관리자 전용</span></h3>
-          <div class="small" style="margin-bottom:10px;">이미지를 선택하면 흰 배경을 제거하고 192×192 / 512×512 PNG를 다운받을 수 있어. 다운받은 파일을 <b>icons/</b> 폴더에 넣고 GitHub에 올려줘.</div>
-          <input type="file" id="iconSourceInput" accept="image/*" style="display:none" onchange="processIconImage(this.files[0])">
-          <div class="btn-grid-1" style="margin-bottom:10px;">
-            <button type="button" onclick="document.getElementById('iconSourceInput').click()">이미지 선택</button>
-          </div>
-          <div id="iconPreviewArea" style="display:none;">
-            <canvas id="iconPreviewCanvas" style="max-width:100%;border-radius:12px;border:1px solid #e2e6ef;margin-bottom:10px;"></canvas>
-            <div class="btn-grid-2">
-              <button class="secondary" type="button" onclick="downloadIcon(192)">icon-192.png 다운로드</button>
-              <button class="secondary" type="button" onclick="downloadIcon(512)">icon-512.png 다운로드</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="card adminOnly hidden-admin">
-          <h3>방 관리 <span class="room-badge">관리자 전용</span></h3>
-          <div class="btn-grid-1" style="margin-bottom:10px;">
-            <button class="secondary" type="button" onclick="loadRoomList()">방 목록 불러오기</button>
-          </div>
-          <div id="roomListContainer"></div>
         </div>
       </section>
     </main>
