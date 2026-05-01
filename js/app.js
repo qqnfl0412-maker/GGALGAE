@@ -739,10 +739,16 @@ function resizeImageToBase64(file, maxPx, quality) {
 function loadCustomLogo() {
   const customLogo = localStorage.getItem("customLogoBase64");
   const splashEl = document.getElementById("splashLogoFull");
+  const splashScreen = document.getElementById("splashScreen");
+
   if (splashEl) {
     splashEl.innerHTML = customLogo
       ? `<img src="${customLogo}" style="width:100%;height:100%;object-fit:cover;">`
       : "";
+  }
+
+  if (splashScreen) {
+    splashScreen.style.background = customLogo ? "#000" : "";
   }
   const previewBox = document.getElementById("logoPreviewBox");
   const previewImg = document.getElementById("logoPreviewImg");
