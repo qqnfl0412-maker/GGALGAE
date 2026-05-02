@@ -365,6 +365,15 @@ async function finishGame(shouldExitAfterFinish = true) {
     return;
   }
 
+  const targetScore = window.APP_CONFIG?.game?.targetScore || 25;
+  const winBy = window.APP_CONFIG?.game?.winBy || 2;
+  const deuceAt = targetScore - 1;
+  const diff = Math.abs(match.scoreA - match.scoreB);
+  if (Math.min(match.scoreA, match.scoreB) >= deuceAt && diff < winBy) {
+    showAlert(`듀스 중이야.\n${deuceAt}:${deuceAt} 이후에는 ${winBy}점 차이로 이겨야 해.`);
+    return;
+  }
+
   setScoreButtonsDisabled(true);
   try {
     await finishWinner();
@@ -407,14 +416,23 @@ async function finishWinner() {
 
   if (!wasFinished) {
     const elim = window.eliminationLosses || 3;
+    // Collect all players newly eliminated by this single match as one batch.
+    // Players in the same batch get the same elimination order, so no '슈퍼깔개'
+    // is assigned when two players are eliminated simultaneously.
+    const newlyEliminated = [];
     Object.keys(window.loss).forEach(p => {
       if ((window.loss[p] || 0) >= elim && (prevLoss[p] || 0) < elim) {
         if (!window.currentRoundEliminationOrder) window.currentRoundEliminationOrder = [];
-        if (!window.currentRoundEliminationOrder.includes(p)) {
-          window.currentRoundEliminationOrder.push(p);
-        }
+        const alreadyTracked = window.currentRoundEliminationOrder.some(
+          entry => Array.isArray(entry) ? entry.includes(p) : entry === p
+        );
+        if (!alreadyTracked) newlyEliminated.push(p);
       }
     });
+    if (newlyEliminated.length > 0) {
+      if (!window.currentRoundEliminationOrder) window.currentRoundEliminationOrder = [];
+      window.currentRoundEliminationOrder.push(newlyEliminated);
+    }
   }
 
   updateScore();

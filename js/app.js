@@ -1481,77 +1481,92 @@ async function saveRoomStateOnly() {
 }
 
 async function saveSingleMatchToServer(index) {
-  if (!window.supabaseClient || !window.currentRoomCode || !window.currentMatches[index]) return;
+  if (!window.supabaseClient || !window.currentRoomCode) return;
 
+  // Serialize saves per match index to prevent score_seq conflicts when a
+  // scheduled timer fires concurrently with an explicit flushMatchSave call.
+  if (!window.matchSaveChain) window.matchSaveChain = {};
+  const prev = window.matchSaveChain[index] || Promise.resolve();
+  let releaseLock;
+  window.matchSaveChain[index] = new Promise(r => { releaseLock = r; });
+  try { await prev; } catch (_) {}
+
+  if (!window.currentMatches[index]) { releaseLock(); return; }
+
+  // Re-read match AFTER the previous save finishes so we get the latest scoreSeq.
   const match = window.currentMatches[index];
   const currentSeq = match.scoreSeq ?? 0;
   const nextSeq = currentSeq + 1;
 
   markMatchesReloadSuppressed(700);
 
-  if (match.dbId) {
-    const { data, error } = await window.supabaseClient
-      .from("match_round_matches")
-      .update({
-        score_a: match.scoreA,
-        score_b: match.scoreB,
-        finished: !!match.finished,
-        winner_index: match.winnerIndex,
-        score_history: deepCopy(match.scoreHistory || []),
-        score_seq: nextSeq
-      })
-      .eq("id", match.dbId)
-      .eq("score_seq", currentSeq)
-      .select();
+  try {
+    if (match.dbId) {
+      const { data, error } = await window.supabaseClient
+        .from("match_round_matches")
+        .update({
+          score_a: match.scoreA,
+          score_b: match.scoreB,
+          finished: !!match.finished,
+          winner_index: match.winnerIndex,
+          score_history: deepCopy(match.scoreHistory || []),
+          score_seq: nextSeq
+        })
+        .eq("id", match.dbId)
+        .eq("score_seq", currentSeq)
+        .select();
 
-    if (error) {
-      console.error(error);
-      setSyncStatus("경기 저장 실패");
-      return;
+      if (error) {
+        console.error(error);
+        setSyncStatus("경기 저장 실패");
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        // 다른 사람이 먼저 저장함 → 서버 상태로 복원
+        window.localMatchDirtyUntil[index] = 0;
+        setSyncStatus("이전 입력으로 복원 중");
+        await loadRoomStateFromServer();
+        return;
+      }
+
+      if (window.currentMatches[index]) {
+        window.currentMatches[index].scoreSeq = nextSeq;
+      }
+    } else {
+      const { data, error } = await window.supabaseClient
+        .from("match_round_matches")
+        .upsert({
+          room_code: window.currentRoomCode,
+          round_no: window.round,
+          match_index: index,
+          team_a: deepCopy(match.teams[0]),
+          team_b: deepCopy(match.teams[1]),
+          score_a: match.scoreA,
+          score_b: match.scoreB,
+          finished: !!match.finished,
+          winner_index: match.winnerIndex,
+          score_history: deepCopy(match.scoreHistory || []),
+          score_seq: nextSeq
+        }, { onConflict: "room_code,round_no,match_index" })
+        .select();
+
+      if (error) {
+        console.error(error);
+        setSyncStatus("경기 저장 실패");
+        return;
+      }
+
+      if (data && data[0] && window.currentMatches[index]) {
+        window.currentMatches[index].dbId = data[0].id;
+        window.currentMatches[index].scoreSeq = nextSeq;
+      }
     }
 
-    if (!data || data.length === 0) {
-      // 다른 사람이 먼저 저장함 → 서버 상태로 복원
-      window.localMatchDirtyUntil[index] = 0;
-      setSyncStatus("이전 입력으로 복원 중");
-      await loadRoomStateFromServer();
-      return;
-    }
-
-    if (window.currentMatches[index]) {
-      window.currentMatches[index].scoreSeq = nextSeq;
-    }
-  } else {
-    const { data, error } = await window.supabaseClient
-      .from("match_round_matches")
-      .upsert({
-        room_code: window.currentRoomCode,
-        round_no: window.round,
-        match_index: index,
-        team_a: deepCopy(match.teams[0]),
-        team_b: deepCopy(match.teams[1]),
-        score_a: match.scoreA,
-        score_b: match.scoreB,
-        finished: !!match.finished,
-        winner_index: match.winnerIndex,
-        score_history: deepCopy(match.scoreHistory || []),
-        score_seq: nextSeq
-      }, { onConflict: "room_code,round_no,match_index" })
-      .select();
-
-    if (error) {
-      console.error(error);
-      setSyncStatus("경기 저장 실패");
-      return;
-    }
-
-    if (data && data[0] && window.currentMatches[index]) {
-      window.currentMatches[index].dbId = data[0].id;
-      window.currentMatches[index].scoreSeq = nextSeq;
-    }
+    setSyncStatus("실시간 반영 중");
+  } finally {
+    releaseLock();
   }
-
-  setSyncStatus("실시간 반영 중");
 }
 
 function scheduleMatchSave(index, delay = 220) {
@@ -3294,11 +3309,17 @@ function computeGalgeFromSnapshots() {
     const roundNo = snaps[i].afterCommitState.round;
 
     // eliminationOrder에 있는 순서대로 먼저 추가
-    for (const p of elimOrder) {
-      if ((afterLoss[p] || 0) >= elim && !history.includes(p)) {
-        history.push(p);
-        roundOf[p] = roundNo;
-        orderOf[p] = history.length;
+    // Each entry may be a batch array (new format) or a plain string (old format).
+    // Players in the same batch share the same orderOf value → no 슈퍼깔개 when tied.
+    for (const entry of elimOrder) {
+      const batch = Array.isArray(entry) ? entry : [entry];
+      const batchOrder = history.length + 1;
+      for (const p of batch) {
+        if ((afterLoss[p] || 0) >= elim && !history.includes(p)) {
+          history.push(p);
+          roundOf[p] = roundNo;
+          orderOf[p] = batchOrder;
+        }
       }
     }
 
@@ -3319,11 +3340,15 @@ function computeGalgeFromSnapshots() {
       : {};
     const currentOrder = window.currentRoundEliminationOrder || [];
 
-    for (const p of currentOrder) {
-      if ((window.loss[p] || 0) >= elim && !history.includes(p)) {
-        history.push(p);
-        roundOf[p] = window.round;
-        orderOf[p] = history.length;
+    for (const entry of currentOrder) {
+      const batch = Array.isArray(entry) ? entry : [entry];
+      const batchOrder = history.length + 1;
+      for (const p of batch) {
+        if ((window.loss[p] || 0) >= elim && !history.includes(p)) {
+          history.push(p);
+          roundOf[p] = window.round;
+          orderOf[p] = batchOrder;
+        }
       }
     }
 
