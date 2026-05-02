@@ -420,10 +420,13 @@ async function finishWinner() {
   updateScore();
   renderScoreMatchList();
 
+  // Compute this before flushMatchSave, because an internal loadRoomStateFromServer()
+  // (seq-mismatch path) can reset window.resultCount to the stale server value.
+  const willCompleteRound = !wasFinished && (window.resultCount >= window.neededResults);
+
   await flushMatchSave(window.currentScoreMatch);
   await saveRoomStateOnly();
 
-  const willCompleteRound = !wasFinished && (window.resultCount >= window.neededResults);
   if (!willCompleteRound) {
     setTimeout(() => loadRoomStateFromServer(), 120);
   }

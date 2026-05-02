@@ -2080,9 +2080,13 @@ function commitRoundStats() {
 }
 
 async function checkRoundEnd() {
-  if (window.resultCount < window.neededResults) return;
+  const actualDone = (window.currentMatches || []).filter(m => m.finished).length;
+  if (actualDone < window.neededResults) return;
   if (window.roundEndCommitted) return;
   window.roundEndCommitted = true;
+
+  // resultCount may have been reset by a concurrent loadRoomStateFromServer; sync it from actual match states
+  window.resultCount = actualDone;
 
   markRoomReloadSuppressed(4000);
 
@@ -2142,6 +2146,10 @@ async function checkRoundEnd() {
   refreshRoundActionButtons();
 
   collectPlayers();
+  // Wait for any in-progress server load to finish before saving the round snapshot
+  for (let _i = 0; _i < 10 && window.isApplyingRemoteState; _i++) {
+    await new Promise(r => setTimeout(r, 50));
+  }
   await saveRoomStateOnly();
   setTimeout(() => loadRoomStateFromServer(), 150);
 
