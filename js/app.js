@@ -1174,8 +1174,7 @@ function chooseWaitingPlayers(activePlayers, waitingCount, fixedTeam) {
   if (waitingCount <= 0) return [];
 
   const candidates = combination(activePlayers, waitingCount);
-  let best = null;
-  let bestScore = Infinity;
+  const scored = [];
 
   for (const group of candidates) {
     if (fixedTeam) {
@@ -1189,21 +1188,20 @@ function chooseWaitingPlayers(activePlayers, waitingCount, fixedTeam) {
       if ((window.lastRoundPlayed[p] || 0) === window.round - 1) score += -10;
       score += (window.playCount[p] || 0) * -3;
     }
-    score += (Math.random() - 0.5) * 20;
-
-    if (score < bestScore) {
-      bestScore = score;
-      best = group;
-    }
+    scored.push({ score, group });
   }
 
-  if (!best) {
+  if (!scored.length) {
     const filtered = activePlayers.filter(p => !fixedTeam || !fixedTeam.includes(p));
     shuffle(filtered);
-    best = filtered.slice(0, waitingCount);
+    return filtered.slice(0, waitingCount);
   }
 
-  return best;
+  scored.sort((a, b) => a.score - b.score);
+  const best = scored[0].score;
+  // Pool: all candidates within 50 points of the best waiting-player choice.
+  const pool = scored.filter(c => c.score <= best + 50);
+  return pool[Math.floor(Math.random() * pool.length)].group;
 }
 
 function generatePairings(playersToPair, fixedTeam = null) {
@@ -1253,9 +1251,10 @@ function getTeamPenalty(team) {
   const key = pairKey(a, b);
   let penalty = 0;
 
-  penalty += (window.teamPairCount[key] || 0) * 100;
+  // Cap at 3 so heavy repetition doesn't completely dominate over randomness.
+  penalty += Math.min(window.teamPairCount[key] || 0, 3) * 100;
   for (const recent of window.recentTeammates) {
-    if (recent === key) penalty += 50;
+    if (recent === key) penalty += 40;
   }
 
   return penalty;
@@ -1267,9 +1266,13 @@ function getOpponentPenalty(teamA, teamB) {
   for (const a of teamA) {
     for (const b of teamB) {
       const key = pairKey(a, b);
-      penalty += (window.opponentPairCount[key] || 0) * 20;
+      // Raised from 20→55 and capped, so opponent-repetition is penalised
+      // more comparably to teammate-repetition.  This breaks the cycle where
+      // high-loss players keep getting split as opponents simply because their
+      // teammate slots are full.
+      penalty += Math.min(window.opponentPairCount[key] || 0, 3) * 55;
       for (const recent of window.recentOpponents) {
-        if (recent === key) penalty += 10;
+        if (recent === key) penalty += 18;
       }
     }
   }
@@ -1304,8 +1307,7 @@ function chooseBestSchedule(activePlayers) {
   const playingPlayers = activePlayers.filter(p => !waitingPlayers.includes(p));
 
   const allTeamCombos = generatePairings(playingPlayers, fixedTeam);
-  let bestPlan = null;
-  let bestScore = Infinity;
+  const candidates = [];
 
   for (const teams of allTeamCombos) {
     if (teams.length !== neededPlayers / 2) continue;
@@ -1324,30 +1326,38 @@ function chooseBestSchedule(activePlayers) {
       }
 
       score += getBalancePenalty(playingPlayers, waitingPlayers);
-
-      score += (Math.random() - 0.5) * 40;
-
-      if (score < bestScore) {
-        bestScore = score;
-        bestPlan = {
-          waitingPlayers: [...waitingPlayers],
-          matches: matchSet.map((m, idx) => ({
-            dbId: null,
-            matchIndex: idx,
-            teams: [[...m[0]], [...m[1]]],
-            finished: false,
-            scoreA: 0,
-            scoreB: 0,
-            scoreHistory: [],
-            winnerIndex: null,
-            scoreSeq: 0
-          }))
-        };
-      }
+      candidates.push({ score, matchSet });
     }
   }
 
-  return bestPlan;
+  if (!candidates.length) return null;
+
+  // Sort by pure structural score (no noise).
+  candidates.sort((a, b) => a.score - b.score);
+  const bestScore = candidates[0].score;
+
+  // Collect all candidates within 200 points of the best score — this is the
+  // "acceptable pool".  Anything in the pool is a reasonable draw; we pick
+  // uniformly at random so every acceptable configuration gets a fair chance.
+  // 200 pts ≈ two repeated-teammate pairs or three opponent repetitions, so
+  // truly bad pairings are still excluded while genuine variety is preserved.
+  const pool = candidates.filter(c => c.score <= bestScore + 200);
+  const chosen = pool[Math.floor(Math.random() * pool.length)];
+
+  return {
+    waitingPlayers: [...waitingPlayers],
+    matches: chosen.matchSet.map((m, idx) => ({
+      dbId: null,
+      matchIndex: idx,
+      teams: [[...m[0]], [...m[1]]],
+      finished: false,
+      scoreA: 0,
+      scoreB: 0,
+      scoreHistory: [],
+      winnerIndex: null,
+      scoreSeq: 0
+    }))
+  };
 }
 
 function matchHTML(i, t1, t2) {
