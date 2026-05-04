@@ -2629,11 +2629,21 @@ function updateBottomNav() {
   nav.style.display = hasRole ? "grid" : "none";
 
   const isParticipant = window.loginMode === "participant";
+  const homeBtn = nav.querySelector('[data-page="home"]');
+  const playersBtn = nav.querySelector('[data-page="players"]');
   const settingsBtn = nav.querySelector('[data-page="settings"]');
-  if (settingsBtn) {
-    settingsBtn.style.display = isParticipant ? "none" : "";
+
+  if (isParticipant) {
+    if (homeBtn) homeBtn.style.display = "none";
+    if (playersBtn) playersBtn.style.display = "none";
+    if (settingsBtn) settingsBtn.style.display = "none";
+    nav.style.gridTemplateColumns = "repeat(2, 1fr)";
+  } else {
+    if (homeBtn) homeBtn.style.display = "";
+    if (playersBtn) playersBtn.style.display = "";
+    if (settingsBtn) settingsBtn.style.display = "";
+    nav.style.gridTemplateColumns = "repeat(5, 1fr)";
   }
-  nav.style.gridTemplateColumns = isParticipant ? "repeat(4, 1fr)" : "repeat(5, 1fr)";
 }
 
 function updateHomePageMode() {
@@ -2715,7 +2725,7 @@ async function handleStart() {
   updateRoomInfo();
   await subscribeRoomRealtime();
   await loadRoomStateFromServer();
-  await goPage("players");
+  await goPage("round");
 }
 
 async function createRoom() {
@@ -2869,15 +2879,26 @@ async function joinRoom() {
 }
 
 function updateRoomInfo() {
-  const roomInfoEl = document.getElementById("roomInfo");
-  if (roomInfoEl) {
+  const roleLabelEl = document.getElementById("roleLabel");
+  if (roleLabelEl) {
     let roleLabel = "";
     if (window.loginMode === "admin") roleLabel = "관리자";
     else if (window.loginMode === "host") roleLabel = "방장";
-    // participant → 빈 문자열
-
-    roomInfoEl.innerText = roleLabel;
+    roleLabelEl.innerText = roleLabel;
+    roleLabelEl.style.display = roleLabel ? "" : "none";
   }
+
+  const topbarRoomCodeEl = document.getElementById("topbarRoomCode");
+  if (topbarRoomCodeEl) {
+    if (window.currentRoomCode) {
+      topbarRoomCodeEl.innerText = window.currentRoomCode;
+      topbarRoomCodeEl.style.display = "";
+    } else {
+      topbarRoomCodeEl.innerText = "";
+      topbarRoomCodeEl.style.display = "none";
+    }
+  }
+
   updateFloatingRoomStatus();
   updateHostOnlyUI();
   updateAdminOnlyUI();

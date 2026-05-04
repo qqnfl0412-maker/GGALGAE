@@ -21,11 +21,14 @@
   <div class="app-shell">
     <header class="topbar">
       <div class="topbar-inner">
-        <div>
+        <div class="topbar-left">
           <h1 class="topbar-title" id="mainTitleText">깔개</h1>
-          <div class="topbar-sub" id="roomInfo">연결된 방 없음</div>
+          <span id="roleLabel" class="topbar-role" style="display:none;"></span>
         </div>
-        <button id="pwaInstallBtn" class="topbar-install-btn" type="button" onclick="triggerPWAInstall()" style="display:none;" title="앱 설치">⬇</button>
+        <div class="topbar-right">
+          <span id="topbarRoomCode" class="topbar-room-code" style="display:none;"></span>
+          <button id="pwaInstallBtn" class="topbar-install-btn" type="button" onclick="triggerPWAInstall()" style="display:none;" title="앱 설치">⬇</button>
+        </div>
       </div>
     </header>
 
