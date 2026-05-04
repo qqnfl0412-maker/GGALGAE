@@ -87,6 +87,7 @@ body {
   font-weight: 800;
   color: #8a92a6;
   letter-spacing: 0.5px;
+  cursor: pointer;
 }
 
 .topbar-install-btn {
