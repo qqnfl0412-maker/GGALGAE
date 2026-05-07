@@ -374,7 +374,7 @@ async function undoScore() {
   scheduleMatchSave(window.currentScoreMatch);
 }
 
-async function finishGame(shouldExitAfterFinish = true) {
+async function finishGame(shouldExitAfterFinish = true, forceFinish = false) {
   if (window.currentScoreMatch < 0 || !window.currentMatches[window.currentScoreMatch]) return;
   if (window.scoreButtonsLocked) return;
 
@@ -388,7 +388,7 @@ async function finishGame(shouldExitAfterFinish = true) {
   const winBy = window.APP_CONFIG?.game?.winBy || 2;
   const deuceAt = targetScore - 1;
   const diff = Math.abs(match.scoreA - match.scoreB);
-  if (Math.min(match.scoreA, match.scoreB) >= deuceAt && diff < winBy) {
+  if (!forceFinish && Math.min(match.scoreA, match.scoreB) >= deuceAt && diff < winBy) {
     showAlert(`듀스 중이야.\n${deuceAt}:${deuceAt} 이후에는 ${winBy}점 차이로 이겨야 해.`);
     return;
   }
