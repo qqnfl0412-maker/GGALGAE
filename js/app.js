@@ -2470,16 +2470,18 @@ async function loadRoomStateFromServer() {
       return {
         dbId: m.id,
         matchIndex: idx,
-        teams: [deepCopy(m.team_a || []), deepCopy(m.team_b || [])],
+        teams: deepCopy(local.teams || [m.team_a || [], m.team_b || []]),
         finished: local.finished,
         scoreA: local.scoreA,
         scoreB: local.scoreB,
         scoreHistory: deepCopy(local.scoreHistory || []),
         winnerIndex: local.winnerIndex,
+        colorSwapped: local.colorSwapped ?? false,
         scoreSeq: local.scoreSeq ?? (m.score_seq || 0)
       };
     }
 
+    const prev = previousLocalMatches[idx];
     return {
       dbId: m.id,
       matchIndex: idx,
@@ -2489,6 +2491,7 @@ async function loadRoomStateFromServer() {
       scoreB: m.score_b || 0,
       scoreHistory: deepCopy(m.score_history || []),
       winnerIndex: typeof m.winner_index === "number" ? m.winner_index : null,
+      colorSwapped: (prev && typeof prev.colorSwapped === "boolean") ? prev.colorSwapped : false,
       scoreSeq: m.score_seq || 0
     };
   });
@@ -2683,7 +2686,7 @@ async function handleStart() {
     return;
   }
 
-  if (val === "j1037") {
+  if (val.toLowerCase() === "j1037") {
     window.isAdmin = false;
     localStorage.removeItem("isAdmin");
     window.loginMode = "host";
