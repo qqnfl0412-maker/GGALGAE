@@ -11,7 +11,7 @@ body {
   margin: 0;
   padding: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-  background: #f0f2f7;
+  background: #f0f9ff;
   color: #1a1d27;
   height: 100%;
   overflow-x: hidden;
@@ -25,7 +25,7 @@ body {
   max-width: 480px;
   margin: 0 auto;
   min-height: 100%;
-  background: #f0f2f7;
+  background: #f0f9ff;
 }
 
 .app-shell {
@@ -76,8 +76,8 @@ body {
 .topbar-role {
   font-size: 11px;
   font-weight: 700;
-  color: #2554e8;
-  background: #eef2ff;
+  color: #0284c7;
+  background: #e0f2fe;
   padding: 2px 8px;
   border-radius: 8px;
 }
@@ -98,8 +98,8 @@ body {
   padding: 0;
   border-radius: 10px;
   font-size: 18px;
-  background: #eef2ff;
-  color: #2554e8;
+  background: #e0f2fe;
+  color: #0284c7;
   flex-shrink: 0;
 }
 
@@ -157,7 +157,7 @@ input, select {
 }
 
 input:focus, select:focus {
-  border-color: #3b6ff0;
+  border-color: #0ea5e9;
   background: #fff;
 }
 
@@ -170,7 +170,7 @@ button {
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
-  background: #2554e8;
+  background: #0ea5e9;
   color: white;
   -webkit-tap-highlight-color: transparent;
   transition: opacity 0.12s, transform 0.1s;
@@ -183,8 +183,8 @@ button:active {
 }
 
 button.secondary {
-  background: #eef2ff;
-  color: #2554e8;
+  background: #e0f2fe;
+  color: #0284c7;
 }
 
 button.gray {
@@ -276,8 +276,8 @@ button:disabled {
   margin-left: 6px;
   padding: 3px 8px;
   border-radius: 20px;
-  background: #eef2ff;
-  color: #2554e8;
+  background: #e0f2fe;
+  color: #0284c7;
   font-size: 11px;
   font-weight: 700;
 }
@@ -286,8 +286,8 @@ button:disabled {
   display: inline-block;
   font-size: 11px;
   font-weight: 800;
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: #bae6fd;
+  color: #0369a1;
   border-radius: 20px;
   padding: 4px 10px;
   margin-bottom: 8px;
@@ -375,8 +375,8 @@ button:disabled {
 }
 
 .nav-btn.active {
-  background: #eef2ff;
-  color: #2554e8;
+  background: #e0f2fe;
+  color: #0284c7;
   font-weight: 800;
 }
 
@@ -395,7 +395,7 @@ button:disabled {
 .splash {
   position: fixed;
   inset: 0;
-  background: linear-gradient(160deg, #1e3fcc, #0b1229);
+  background: linear-gradient(160deg, #0ea5e9, #0284c7);
   color: white;
   z-index: 2000;
   display: flex;
@@ -448,8 +448,8 @@ button:disabled {
 
 .player-slot-card.filled {
   border-style: solid;
-  background: #eef2ff;
-  border-color: #c0ccf8;
+  background: #e0f2fe;
+  border-color: #7dd3fc;
 }
 
 .player-slot-card .player-slot-label {
@@ -666,7 +666,7 @@ button:disabled {
 .record-list-item:active { background: #e1e6f5; }
 
 /* Full-screen record detail */
-.records-detail-modal { position: fixed; inset: 0; z-index: 500; background: #f0f2f7; display: flex; flex-direction: column; }
+.records-detail-modal { position: fixed; inset: 0; z-index: 500; background: #f0f9ff; display: flex; flex-direction: column; }
 .records-detail-modal.hidden { display: none; }
 
 .records-detail-content {
@@ -734,8 +734,8 @@ button:disabled {
 }
 .room-list-item:active { background: #e1e6f5; }
 .room-list-item-current {
-  background: #eef2ff;
-  border-color: #c0ccf8;
+  background: #e0f2fe;
+  border-color: #7dd3fc;
 }
 .room-list-code {
   font-weight: 800;
@@ -751,7 +751,7 @@ button:disabled {
 .room-list-badge {
   font-size: 11px;
   font-weight: 700;
-  background: #2554e8;
+  background: #0ea5e9;
   color: #fff;
   border-radius: 20px;
   padding: 2px 8px;
