@@ -143,10 +143,15 @@ body.score-referee-mode #page-score.active { display: block; }
   min-width: 0;
   overflow: hidden;
   box-sizing: border-box;
+  transition: background 0.3s ease;
 }
 
 .score-tap-left  { border-radius: 13px 0 0 13px; }
 .score-tap-right { border-radius: 0 13px 13px 0; }
+
+/* ── 팀 색상 (빨강 / 파랑) ── */
+.score-team-red  { background: linear-gradient(160deg, #991b1b, #dc2626); }
+.score-team-blue { background: linear-gradient(160deg, #1e40af, #2563eb); }
 
 /* ── 팀 구분선 (버튼 border-right 대신 독립 div 사용) ── */
 .score-center-divider {

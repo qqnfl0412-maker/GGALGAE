@@ -194,7 +194,8 @@ function swapCourtSides() {
     teams: deepCopy(match.teams),
     scoreA: match.scoreA,
     scoreB: match.scoreB,
-    winnerIndex: match.winnerIndex
+    winnerIndex: match.winnerIndex,
+    colorSwapped: match.colorSwapped ?? false
   });
 
   const oldTeamA = deepCopy(match.teams[0]);
@@ -209,6 +210,8 @@ function swapCourtSides() {
 
   if (match.winnerIndex === 0) match.winnerIndex = 1;
   else if (match.winnerIndex === 1) match.winnerIndex = 0;
+
+  match.colorSwapped = !(match.colorSwapped ?? false);
 
   markMatchDirty(window.currentScoreMatch, 1400);
 
@@ -245,6 +248,19 @@ function fitScoreText() {
   });
 }
 
+function applyScoreColors(match) {
+  const tapA = document.getElementById("scoreTapA");
+  const tapB = document.getElementById("scoreTapB");
+  if (!tapA || !tapB) return;
+  if (match.colorSwapped) {
+    tapA.classList.remove("score-team-red");  tapA.classList.add("score-team-blue");
+    tapB.classList.remove("score-team-blue"); tapB.classList.add("score-team-red");
+  } else {
+    tapA.classList.remove("score-team-blue"); tapA.classList.add("score-team-red");
+    tapB.classList.remove("score-team-red");  tapB.classList.add("score-team-blue");
+  }
+}
+
 function updateScoreBoard() {
   if (window.currentScoreMatch < 0 || !window.currentMatches[window.currentScoreMatch]) return;
 
@@ -258,6 +274,7 @@ function updateScoreBoard() {
   const finishBtn = document.getElementById("finishMatchBtn");
   if (finishBtn) finishBtn.disabled = window.scoreButtonsLocked;
 
+  applyScoreColors(match);
   fitScoreText();
 }
 
@@ -268,6 +285,7 @@ function openScore(i) {
   const match = window.currentMatches[i];
   window.scoreOpenedDbId = match.dbId ?? null;
   window.editMode = match.finished;
+  if (match.colorSwapped === undefined) match.colorSwapped = false;
 
   document.getElementById("scoreRoundLabel").innerText = `Round ${window.round} / 경기 ${i + 1}`;
   document.getElementById("editModeLabel").innerText = window.editMode ? "수정 모드" : "";
@@ -343,6 +361,7 @@ async function undoScore() {
     match.scoreA = last.scoreA ?? 0;
     match.scoreB = last.scoreB ?? 0;
     match.winnerIndex = typeof last.winnerIndex === "number" ? last.winnerIndex : null;
+    if (typeof last.colorSwapped === "boolean") match.colorSwapped = last.colorSwapped;
   }
 
   markMatchDirty(window.currentScoreMatch, 1200);
