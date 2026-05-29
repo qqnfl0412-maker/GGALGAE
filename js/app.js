@@ -724,7 +724,8 @@ async function loadLogoFromServer() {
     .eq("id", "global")
     .maybeSingle();
   if (error) { console.error("로고 로딩 실패:", error); return; }
-  const serverLogo = data?.logo_base64 || null;
+  if (!data) return;
+  const serverLogo = data.logo_base64 || null;
   const localLogo  = localStorage.getItem("customLogoBase64") || null;
   if (serverLogo !== localLogo) {
     if (serverLogo) localStorage.setItem("customLogoBase64", serverLogo);
@@ -745,13 +746,6 @@ function setupLogoSync() {
       async () => { await loadLogoFromServer(); }
     )
     .subscribe();
-
-  // 탭/앱이 다시 활성화될 때도 서버 로고 확인
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && window.supabaseClient) {
-      loadLogoFromServer();
-    }
-  });
 }
 
 function resizeImageToBase64(file, maxPx, quality) {
