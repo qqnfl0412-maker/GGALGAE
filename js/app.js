@@ -3468,18 +3468,24 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupPlayerSync();
   setupModalKeyHandler();
 
-  // 스플래시 중 서버에서 로고 선제 로드 (방 접속 불필요)
-  // await 로 기다려야 첫 방문자에게도 로고가 표시됨
-  await loadLogoFromServer();
+  // 로고 로딩(최대 1.5초 제한)과 최소 표시 시간을 동시에 시작
+  // 둘 다 끝나야 스플래시가 사라짐 → 첫 방문자도 로고 표시, 느린 네트워크에서도 무한 대기 없음
+  const logoLoadDone = Promise.race([
+    loadLogoFromServer(),
+    new Promise(r => setTimeout(r, 1500))
+  ]);
 
   const splash = document.getElementById("splashScreen");
   if (splash) {
-    setTimeout(() => {
+    Promise.all([
+      logoLoadDone,
+      new Promise(r => setTimeout(r, window.APP_CONFIG.ui.splashDelayMs))
+    ]).then(() => {
       splash.classList.add("hide");
       setTimeout(() => {
         splash.style.display = "none";
       }, window.APP_CONFIG.ui.splashHideTransitionMs);
-    }, window.APP_CONFIG.ui.splashDelayMs);
+    });
   }
 
   updateEliminationLossesUI();

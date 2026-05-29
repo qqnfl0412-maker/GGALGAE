@@ -3,8 +3,8 @@
   "short_name": "배드민턴앱",
   "start_url": "./index.html",
   "display": "fullscreen",
-  "background_color": "#0ea5e9",
-  "theme_color": "#0ea5e9",
+  "background_color": "#1a2744",
+  "theme_color": "#1a2744",
   "orientation": "portrait",
   "icons": [
     {
