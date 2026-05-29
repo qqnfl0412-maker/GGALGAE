@@ -705,28 +705,53 @@ function updateAdminOnlyUI() {
 }
 
 async function saveLogoToServer(base64OrNull) {
-  if (!window.supabaseClient) return;
+  if (!window.supabaseClient) return false;
   const { error } = await window.supabaseClient
     .from("app_settings")
     .upsert({ id: "global", logo_base64: base64OrNull });
-  if (error) console.error("로고 저장 실패:", error);
+  if (error) {
+    console.error("로고 저장 실패:", error);
+    return false;
+  }
+  return true;
 }
 
 async function loadLogoFromServer() {
   if (!window.supabaseClient) return;
-  const { data } = await window.supabaseClient
+  const { data, error } = await window.supabaseClient
     .from("app_settings")
     .select("logo_base64")
     .eq("id", "global")
     .maybeSingle();
-  if (!data) return;
-  const serverLogo = data.logo_base64 || null;
+  if (error) { console.error("로고 로딩 실패:", error); return; }
+  const serverLogo = data?.logo_base64 || null;
   const localLogo  = localStorage.getItem("customLogoBase64") || null;
   if (serverLogo !== localLogo) {
     if (serverLogo) localStorage.setItem("customLogoBase64", serverLogo);
     else localStorage.removeItem("customLogoBase64");
     loadCustomLogo();
   }
+}
+
+function setupLogoSync() {
+  if (!window.supabaseClient) return;
+
+  // app_settings 변경 실시간 구독 (다른 기기에서 로고 바꾸면 즉시 반영)
+  window.supabaseClient
+    .channel("app-settings-logo")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "app_settings", filter: "id=eq.global" },
+      async () => { await loadLogoFromServer(); }
+    )
+    .subscribe();
+
+  // 탭/앱이 다시 활성화될 때도 서버 로고 확인
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && window.supabaseClient) {
+      loadLogoFromServer();
+    }
+  });
 }
 
 function resizeImageToBase64(file, maxPx, quality) {
@@ -793,8 +818,10 @@ async function changeLogoImage(file) {
     const b64 = await resizeImageToBase64(file, 1000, 0.85);
     localStorage.setItem("customLogoBase64", b64);
     loadCustomLogo();
-    await saveLogoToServer(b64);
-    if (previewEl) previewEl.innerText = "저장됐어. 방에 접속한 모든 기기에 반영돼.";
+    const saved = await saveLogoToServer(b64);
+    if (previewEl) previewEl.innerText = saved
+      ? "저장됐어. 방에 접속한 모든 기기에 반영돼."
+      : "이 기기엔 저장됐지만 서버 저장 실패. Supabase app_settings 테이블/권한을 확인해줘.";
   } catch (err) {
     showAlert("이미지 처리 실패: " + err);
     if (previewEl) previewEl.innerText = "";
@@ -3466,6 +3493,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.error("Supabase init error:", e);
   }
   setupPlayerSync();
+  setupLogoSync();
   setupModalKeyHandler();
 
   // 로고 로딩(최대 1.5초 제한)과 최소 표시 시간을 동시에 시작
