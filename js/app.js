@@ -3469,7 +3469,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupModalKeyHandler();
 
   // 스플래시 중 서버에서 로고 선제 로드 (방 접속 불필요)
-  loadLogoFromServer();
+  // await 로 기다려야 첫 방문자에게도 로고가 표시됨
+  await loadLogoFromServer();
 
   const splash = document.getElementById("splashScreen");
   if (splash) {

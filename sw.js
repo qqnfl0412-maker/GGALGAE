@@ -1,6 +1,5 @@
-const CACHE_NAME = "badminton-bracket-v12";
+const CACHE_NAME = "badminton-bracket-v13";
 const ASSETS = [
-  "./",
   "./index.html",
   "./manifest.webmanifest",
   "./css/common.css",
@@ -8,7 +7,9 @@ const ASSETS = [
   "./js/app-config.js",
   "./js/supabase-config.js",
   "./js/app.js",
-  "./js/scoreboard.js"
+  "./js/scoreboard.js",
+  "./icons/icon-192.png",
+  "./icons/icon-512.png"
 ];
 
 self.addEventListener("install", event => {
@@ -33,7 +34,10 @@ self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
 
   const url = new URL(event.request.url);
-  const isAsset = ASSETS.some(a => url.pathname.endsWith(a.replace("./", "")));
+  const isAsset = ASSETS.some(a => {
+    const suffix = a.replace("./", "/");
+    return url.pathname === suffix || url.pathname.endsWith(suffix);
+  });
 
   if (isAsset) {
     // JS/CSS는 네트워크 우선 → 실패 시 캐시
