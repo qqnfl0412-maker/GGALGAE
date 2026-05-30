@@ -380,13 +380,89 @@ button:disabled {
   font-weight: 800;
 }
 
+/* ── Record Table (경기 기록) ── */
+.record-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.record-table th,
+.record-table td {
+  padding: 8px 4px;
+  text-align: center;
+  border: 1px solid #d1d5db;
+}
+.record-table thead th {
+  background: #f3f4f6;
+  font-weight: 700;
+  color: #374151;
+}
+.record-table td:first-child {
+  text-align: left;
+  padding-left: 8px;
+  font-weight: 500;
+}
+.record-table tr.eliminated td {
+  color: #9ca3af;
+}
+
 /* ── History ── */
 .history-box {
-  max-height: 300px;
+  max-height: 360px;
   overflow: auto;
   line-height: 1.6;
-  white-space: normal;
   word-break: break-word;
+  font-size: 13px;
+  color: #374151;
+}
+.hist-round {
+  margin-bottom: 18px;
+  text-align: center;
+}
+.hist-round-header {
+  font-weight: 700;
+  font-size: 14px;
+  color: #0284c7;
+  margin-bottom: 4px;
+}
+.hist-match {
+  font-size: 13px;
+  line-height: 2;
+  color: #1f2937;
+}
+.hist-handicap {
+  font-size: 12px;
+  color: #9ca3af;
+  line-height: 2;
+}
+.hist-waiting-wrap {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+}
+.hist-waiting-box {
+  display: inline-block;
+  border: 1.5px solid #9ca3af;
+  border-radius: 12px;
+  padding: 10px 20px 8px;
+  position: relative;
+  min-width: 100px;
+  text-align: left;
+}
+.hist-waiting-label {
+  position: absolute;
+  top: 0;
+  left: 14px;
+  transform: translateY(-50%);
+  background: #fff;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #374151;
+  border: 1.5px solid #9ca3af;
+  border-radius: 4px;
+}
+.hist-waiting-players {
   font-size: 13px;
   color: #374151;
 }

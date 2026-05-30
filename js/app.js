@@ -377,15 +377,56 @@ function addHistory(text) {
   renderHistory();
 }
 
+function renderMatchLine(line) {
+  const lastParen = line.lastIndexOf(' (');
+  if (lastParen < 0 || !line.endsWith(' 승)')) {
+    return `<div class="hist-match">${line}</div>`;
+  }
+  const winner = line.slice(lastParen + 2, line.length - 3);
+  const mainPart = line.slice(0, lastParen);
+  const idx = mainPart.indexOf(winner);
+  const display = idx >= 0
+    ? mainPart.slice(0, idx) + `<b>${winner}</b>` + mainPart.slice(idx + winner.length)
+    : mainPart;
+  return `<div class="hist-match">${display}</div>`;
+}
+
+function renderHistoryLines(lines) {
+  if (!lines || !lines.length) return '';
+  const sections = parseHistorySections(lines);
+  const rounds = Object.keys(sections).map(Number).sort((a, b) => a - b);
+  let html = '';
+  for (const roundNo of rounds) {
+    const roundLines = sections[roundNo].filter(l => !/^===== Round \d+ =====$/.test(l));
+    const matchResults = [], handicaps = [];
+    let waitingPlayers = null;
+    for (const line of roundLines) {
+      if (line.startsWith('대기 : ')) {
+        waitingPlayers = line.slice('대기 : '.length).split(' / ').join(', ');
+      } else if (line.includes('핸디캡 패 +1')) {
+        handicaps.push(line);
+      } else if (line.includes(' : ') && line.lastIndexOf(' (') >= 0 && line.endsWith(' 승)')) {
+        matchResults.push(line);
+      }
+    }
+    html += `<div class="hist-round"><div class="hist-round-header">Round ${roundNo}</div>`;
+    for (const ml of matchResults) html += renderMatchLine(ml);
+    for (const hl of handicaps) html += `<div class="hist-handicap">${hl}</div>`;
+    if (waitingPlayers) {
+      html += `<div class="hist-waiting-wrap"><div class="hist-waiting-box">
+        <span class="hist-waiting-label">대기</span>
+        <span class="hist-waiting-players">${waitingPlayers}</span>
+      </div></div>`;
+    }
+    html += '</div>';
+  }
+  return html;
+}
+
 function renderHistory() {
   const historyEl = document.getElementById("history");
   if (!historyEl) return;
-
-  if (!window.currentRoundHistoryLines.length) {
-    historyEl.innerHTML = "";
-    return;
-  }
-  historyEl.innerHTML = window.currentRoundHistoryLines.join("<br>") + "<br>";
+  historyEl.innerHTML = renderHistoryLines(window.currentRoundHistoryLines);
 }
 
 function parseHistorySections(lines) {
@@ -563,39 +604,48 @@ function getLiveRestCount(name) {
 }
 
 function updateScore() {
-  let html = "";
+  const scoreEl = document.getElementById("score");
   const names = Object.keys(window.loss);
 
   if (names.length === 0) {
-    html = "기록 없음";
-  } else {
-    names.sort((a, b) => {
-      if (window.loss[b] !== window.loss[a]) return window.loss[b] - window.loss[a];
-
-      const playA = getLivePlayCount(a);
-      const playB = getLivePlayCount(b);
-      if (playB !== playA) return playB - playA;
-
-      const restA = getLiveRestCount(a);
-      const restB = getLiveRestCount(b);
-      if (restA !== restB) return restA - restB;
-
-      return a.localeCompare(b, "ko");
-    });
-
-    for (const name of names) {
-      const livePlayCount = getLivePlayCount(name);
-      const liveRestCount = getLiveRestCount(name);
-
-      let text = `${name} : ${window.loss[name]}패`;
-      if (window.loss[name] >= window.eliminationLosses) text += " (탈락)";
-      text += ` / 출전 ${livePlayCount} / 대기 ${liveRestCount}`;
-      html += text + "<br>";
-    }
+    if (scoreEl) scoreEl.innerHTML = "<span class='small'>기록 없음</span>";
+    updatePenaltyList();
+    updatePlayersPreview();
+    updateGalgeList();
+    return;
   }
 
-  const scoreEl = document.getElementById("score");
-  if (scoreEl) scoreEl.innerHTML = html;
+  names.sort((a, b) => {
+    if (window.loss[b] !== window.loss[a]) return window.loss[b] - window.loss[a];
+    const playA = getLivePlayCount(a);
+    const playB = getLivePlayCount(b);
+    if (playB !== playA) return playB - playA;
+    const restA = getLiveRestCount(a);
+    const restB = getLiveRestCount(b);
+    if (restA !== restB) return restA - restB;
+    return a.localeCompare(b, "ko");
+  });
+
+  let rows = "";
+  for (const name of names) {
+    const play = getLivePlayCount(name);
+    const rest = getLiveRestCount(name);
+    const loss = window.loss[name];
+    const win = Math.max(0, play - loss);
+    const eliminated = loss >= window.eliminationLosses;
+    const nameCell = eliminated
+      ? `${name} <small style="color:#ef4444;">(탈락)</small>`
+      : name;
+    rows += `<tr class="${eliminated ? "eliminated" : ""}">
+      <td>${nameCell}</td><td>${play}</td><td>${loss}</td><td>${win}</td><td>${rest}</td>
+    </tr>`;
+  }
+
+  if (scoreEl) scoreEl.innerHTML = `<table class="record-table">
+    <thead><tr><th>선수</th><th>출전</th><th>패배</th><th>승리</th><th>대기</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+
   updatePenaltyList();
   updatePlayersPreview();
   updateGalgeList();
@@ -3649,12 +3699,12 @@ function showRecordDetail(name) {
       <div>${record.galgeHtml || "<span class='small'>깔개 없음</span>"}</div>
     </div>
     <div class="card">
-      <h3>패배 / 출전 / 대기 기록</h3>
-      <div style="font-size:13px;line-height:1.7;">${record.scoreHtml || "<span class='small'>기록 없음</span>"}</div>
+      <h3>경기 기록</h3>
+      <div>${record.scoreHtml || "<span class='small'>기록 없음</span>"}</div>
     </div>
     <div class="card">
       <h3>라운드 기록</h3>
-      <div class="history-box">${(record.historyLines || []).join("<br>")}</div>
+      <div class="history-box">${renderHistoryLines(record.historyLines || [])}</div>
     </div>
   `;
   closeRecordsListModal();
