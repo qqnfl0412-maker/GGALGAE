@@ -384,10 +384,22 @@ function renderMatchLine(line) {
   }
   const winner = line.slice(lastParen + 2, line.length - 3);
   const mainPart = line.slice(0, lastParen);
-  const idx = mainPart.indexOf(winner);
-  const display = idx >= 0
-    ? mainPart.slice(0, idx) + `<b>${winner}</b>` + mainPart.slice(idx + winner.length)
-    : mainPart;
+  const colonIdx = mainPart.indexOf(' : ');
+  let display;
+  if (colonIdx >= 0) {
+    const sideA = mainPart.slice(0, colonIdx);   // "팀A 점수A"
+    const sideB = mainPart.slice(colonIdx + 3);  // "점수B 팀B"
+    if (sideA.startsWith(winner)) {
+      display = `<b>${sideA}</b> : ${sideB}`;
+    } else {
+      display = `${sideA} : <b>${sideB}</b>`;
+    }
+  } else {
+    const idx = mainPart.indexOf(winner);
+    display = idx >= 0
+      ? mainPart.slice(0, idx) + `<b>${winner}</b>` + mainPart.slice(idx + winner.length)
+      : mainPart;
+  }
   return `<div class="hist-match">${display}</div>`;
 }
 
