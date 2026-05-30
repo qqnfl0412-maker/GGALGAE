@@ -628,6 +628,9 @@ function updateScore() {
   }
 
   names.sort((a, b) => {
+    const elimA = window.loss[a] >= window.eliminationLosses ? 1 : 0;
+    const elimB = window.loss[b] >= window.eliminationLosses ? 1 : 0;
+    if (elimA !== elimB) return elimA - elimB;
     if (window.loss[b] !== window.loss[a]) return window.loss[b] - window.loss[a];
     const playA = getLivePlayCount(a);
     const playB = getLivePlayCount(b);
