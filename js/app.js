@@ -644,6 +644,7 @@ function updateScore() {
     const rest = getLiveRestCount(name);
     const loss = window.loss[name];
     const win = Math.max(0, play - loss);
+    if (play === 0 && loss === 0 && rest === 0) continue;
     const eliminated = loss >= window.eliminationLosses;
     const nameCell = eliminated
       ? `${name} <small style="color:#ef4444;">(탈락)</small>`
