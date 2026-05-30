@@ -386,16 +386,18 @@ button:disabled {
   border-collapse: collapse;
   font-size: 13px;
 }
-.record-table th,
-.record-table td {
+.record-table th {
   padding: 8px 4px;
   text-align: center;
   border: 1px solid #d1d5db;
-}
-.record-table thead th {
   background: #f3f4f6;
   font-weight: 700;
   color: #374151;
+}
+.record-table td {
+  padding: 10px 4px;
+  text-align: center;
+  border: 1px solid #d1d5db;
 }
 .record-table td:first-child {
   text-align: center;
@@ -454,8 +456,8 @@ button:disabled {
 .hist-waiting-label {
   position: absolute;
   top: 0;
-  left: 14px;
-  transform: translateY(-50%);
+  left: 50%;
+  transform: translate(-50%, -50%);
   background: #fff;
   padding: 1px 7px;
   font-size: 11px;
@@ -463,6 +465,7 @@ button:disabled {
   color: #374151;
   border: 1.5px solid #9ca3af;
   border-radius: 4px;
+  white-space: nowrap;
 }
 .hist-waiting-players {
   font-size: 13px;
