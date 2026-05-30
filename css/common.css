@@ -445,19 +445,21 @@ button:disabled {
   justify-content: center;
 }
 .hist-waiting-box {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1.5px solid #9ca3af;
   border-radius: 12px;
-  padding: 8px 20px 8px;
+  padding: 14px 20px 10px;
   position: relative;
   min-width: 100px;
-  text-align: left;
+  min-height: 48px;
 }
 .hist-waiting-label {
   position: absolute;
   top: 0;
   left: 50%;
-  transform: translate(-50%, -100%);
+  transform: translate(-50%, -50%);
   background: #fff;
   padding: 1px 7px;
   font-size: 11px;
