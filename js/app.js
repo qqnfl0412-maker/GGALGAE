@@ -41,6 +41,8 @@ window.galgeCount = 3;
 window.loginMode = null;
 window.isAdmin = false;
 window.currentRoundEliminationOrder = [];
+window.matchMakingMode = 'fairness';
+window.fixedWaiting = [];
 window.roundEndCommitted = false;
 
 window.supabaseClient = null;
@@ -665,6 +667,7 @@ function updateScore() {
   updatePenaltyList();
   updatePlayersPreview();
   updateGalgeList();
+  updateFixedWaitingList();
 }
 
 function collectPlayers() {
@@ -939,6 +942,11 @@ async function goPage(name) {
 
   if (name === "settings") {
     updateFixedTeamDropdowns();
+    updateFixedWaitingDropdowns();
+  }
+
+  if (name === "players") {
+    updateMatchMakingModeUI();
   }
 }
 
@@ -960,6 +968,8 @@ function resetLocalStateOnly() {
   window.currentScoreMatch = -1;
   window.roundLocked = false;
   window.editMode = false;
+  window.currentRoundEliminationOrder = [];
+  window.fixedWaiting = [];
   window.restoredCompletedRound = false;
   window.restoredSnapshotIndex = -1;
   window.participantCanSeeNextRound = false;
@@ -1250,6 +1260,161 @@ function updateFixedList() {
   el.innerHTML = html;
 }
 
+/* ════════════════════════════
+   대진 모드 (형평성 / 도파민)
+════════════════════════════ */
+function setMatchMakingMode(mode) {
+  if (!window.isHost) { showAlert("방장만 변경할 수 있어."); return; }
+  window.matchMakingMode = mode;
+  updateMatchMakingModeUI();
+  saveRoomStateOnly();
+}
+
+function updateMatchMakingModeUI() {
+  const mode = window.matchMakingMode || 'fairness';
+  const fairBtn = document.getElementById("modeBtn_fairness");
+  const dopBtn  = document.getElementById("modeBtn_dopamine");
+  const status  = document.getElementById("matchMakingModeStatus");
+  if (fairBtn) {
+    fairBtn.className = mode === 'fairness' ? '' : 'secondary';
+  }
+  if (dopBtn) {
+    dopBtn.className = mode === 'dopamine' ? '' : 'secondary';
+  }
+  if (status) {
+    status.innerText = `현재 모드: ${mode === 'dopamine' ? '도파민 (완전 랜덤)' : '형평성'}`;
+  }
+}
+
+function chooseBestScheduleDopamine(activePlayers) {
+  let matchCount = Math.floor(activePlayers.length / 4);
+  if (matchCount > window.APP_CONFIG.game.maxCourts) matchCount = window.APP_CONFIG.game.maxCourts;
+
+  const neededPlayers = matchCount * 4;
+  const waitingCount  = activePlayers.length - neededPlayers;
+  const fixedTeam     = getRoundFixedTeam(activePlayers);
+
+  const waitingPlayers  = chooseWaitingPlayers(activePlayers, waitingCount, fixedTeam);
+  const playingPlayers  = activePlayers.filter(p => !waitingPlayers.includes(p));
+
+  // 완전 랜덤 섞기 (이전 기록 무시)
+  const shuffled = [...playingPlayers];
+  shuffle(shuffled);
+
+  // 고정팀이 있으면 그 팀을 첫 번째 팀으로 배치
+  if (fixedTeam && shuffled.includes(fixedTeam[0]) && shuffled.includes(fixedTeam[1])) {
+    const idxA = shuffled.indexOf(fixedTeam[0]);
+    const idxB = shuffled.indexOf(fixedTeam[1]);
+    shuffled.splice(idxB, 1);
+    shuffled.splice(idxA, 1);
+    shuffled.unshift(fixedTeam[1]);
+    shuffled.unshift(fixedTeam[0]);
+  }
+
+  const matches = [];
+  for (let i = 0; i < matchCount; i++) {
+    const t1 = [shuffled[i * 4], shuffled[i * 4 + 1]];
+    const t2 = [shuffled[i * 4 + 2], shuffled[i * 4 + 3]];
+    matches.push({
+      dbId: null,
+      matchIndex: i,
+      teams: [t1, t2],
+      finished: false,
+      scoreA: 0,
+      scoreB: 0,
+      scoreHistory: [],
+      winnerIndex: null,
+      scoreSeq: 0
+    });
+  }
+
+  return { waitingPlayers, matches };
+}
+
+/* ════════════════════════════
+   대기 인원 고정
+════════════════════════════ */
+function updateFixedWaitingDropdowns() {
+  const sel  = document.getElementById("fixedWait1");
+  const selR = document.getElementById("fixedWaitRound");
+  if (!sel || !selR) return;
+
+  const players = [];
+  for (let i = 1; i <= window.APP_CONFIG.game.maxPlayers; i++) {
+    const el = document.getElementById("p" + i);
+    if (el && el.value.trim()) players.push(el.value.trim());
+  }
+
+  const val = sel.value;
+  sel.innerHTML = '<option value="">선수 선택</option>' +
+    players.map(p => `<option value="${p}"${p === val ? " selected" : ""}>${p}</option>`).join("");
+
+  const currentRound = window.round || 0;
+  const start = currentRound + 1;
+  const curSelR = selR.value;
+  selR.innerHTML = '<option value="">라운드 선택</option>';
+  for (let r = start; r < start + 5; r++) {
+    selR.innerHTML += `<option value="${r}"${String(r) === curSelR ? " selected" : ""}>${r}라운드</option>`;
+  }
+}
+
+async function addFixedWaiting() {
+  if (!ensureHost("대기 인원 추가")) return;
+  if (!beginHostAction()) return;
+  try {
+    const p = (document.getElementById("fixedWait1")?.value || "").trim();
+    const r = parseInt(document.getElementById("fixedWaitRound")?.value || "", 10);
+    if (!p || !r) { showAlert("선수와 라운드를 선택해줘."); return; }
+
+    if (!window.fixedWaiting) window.fixedWaiting = [];
+    const exists = window.fixedWaiting.some(fw => fw.player === p && fw.round === r);
+    if (exists) { showAlert("이미 설정된 대기 인원이야."); return; }
+
+    window.fixedWaiting.push({ player: p, round: r });
+    updateFixedWaitingList();
+    await saveRoomStateOnly();
+
+    const selEl = document.getElementById("fixedWait1");
+    const selR  = document.getElementById("fixedWaitRound");
+    if (selEl) selEl.value = "";
+    if (selR)  selR.value  = "";
+  } finally {
+    endHostAction();
+  }
+}
+
+async function removeFixedWaiting(index) {
+  if (!ensureHost("대기 인원 삭제")) return;
+  if (!beginHostAction()) return;
+  try {
+    if (window.fixedWaiting) window.fixedWaiting.splice(index, 1);
+    updateFixedWaitingList();
+    await saveRoomStateOnly();
+  } finally {
+    endHostAction();
+  }
+}
+
+function updateFixedWaitingList() {
+  const el = document.getElementById("fixedWaitingList");
+  if (!el) return;
+
+  if (!window.fixedWaiting || window.fixedWaiting.length === 0) {
+    el.innerHTML = "설정된 대기 인원 없음";
+    return;
+  }
+
+  let html = "";
+  window.fixedWaiting.forEach((fw, idx) => {
+    html += `${fw.round}R : ${fw.player}`;
+    if (window.isHost) {
+      html += ` <button onclick="removeFixedWaiting(${idx})" style="min-height:auto;padding:4px 8px;font-size:12px;">삭제</button>`;
+    }
+    html += "<br>";
+  });
+  el.innerHTML = html;
+}
+
 function getRoundFixedTeam(activePlayers) {
   const fixed = window.fixedTeams.find(f => f.round === window.round);
   if (!fixed) return null;
@@ -1260,35 +1425,50 @@ function getRoundFixedTeam(activePlayers) {
 function chooseWaitingPlayers(activePlayers, waitingCount, fixedTeam) {
   if (waitingCount <= 0) return [];
 
-  const candidates = combination(activePlayers, waitingCount);
+  // 이번 라운드에 고정 대기로 지정된 선수 처리
+  const mandatoryWait = (window.fixedWaiting || [])
+    .filter(fw => fw.round === window.round && activePlayers.includes(fw.player)
+      && (!fixedTeam || !fixedTeam.includes(fw.player)))
+    .map(fw => fw.player)
+    .filter((p, i, arr) => arr.indexOf(p) === i) // 중복 제거
+    .slice(0, waitingCount);
+
+  if (mandatoryWait.length >= waitingCount) {
+    return mandatoryWait;
+  }
+
+  const extraNeeded = waitingCount - mandatoryWait.length;
+  const remainingPool = activePlayers.filter(p =>
+    !mandatoryWait.includes(p) && (!fixedTeam || !fixedTeam.includes(p))
+  );
+
+  const candidates = combination(remainingPool, extraNeeded);
   const scored = [];
 
   for (const group of candidates) {
-    if (fixedTeam) {
-      if (group.includes(fixedTeam[0]) || group.includes(fixedTeam[1])) continue;
-    }
-
     let score = 0;
     for (const p of group) {
       score += (window.restCount[p] || 0) * -30;
       if ((window.lastRoundRest[p] || 0) === window.round - 1) score += 200;
-      if ((window.lastRoundPlayed[p] || 0) === window.round - 1) score += -10;
+      // 직전 라운드에 경기한 선수는 강하게 대기 우선 (연속 경기 방지)
+      if ((window.lastRoundPlayed[p] || 0) === window.round - 1) score += -200;
       score += (window.playCount[p] || 0) * -3;
     }
     scored.push({ score, group });
   }
 
   if (!scored.length) {
-    const filtered = activePlayers.filter(p => !fixedTeam || !fixedTeam.includes(p));
+    const filtered = remainingPool.slice();
     shuffle(filtered);
-    return filtered.slice(0, waitingCount);
+    return [...mandatoryWait, ...filtered.slice(0, extraNeeded)];
   }
 
   scored.sort((a, b) => a.score - b.score);
   const best = scored[0].score;
-  // Pool: all candidates within 50 points of the best waiting-player choice.
-  const pool = scored.filter(c => c.score <= best + 50);
-  return pool[Math.floor(Math.random() * pool.length)].group;
+  // Pool: 허용 범위를 좁혀 랜덤성 감소 → 출전 횟수 균형 개선
+  const pool = scored.filter(c => c.score <= best + 10);
+  const chosen = pool[Math.floor(Math.random() * pool.length)].group;
+  return [...mandatoryWait, ...chosen];
 }
 
 function generatePairings(playersToPair, fixedTeam = null) {
@@ -1371,8 +1551,10 @@ function getBalancePenalty(playingPlayers, waitingPlayers) {
   let penalty = 0;
 
   for (const p of playingPlayers) {
-    penalty += (window.playCount[p] || 0) * 2;
-    if ((window.lastRoundPlayed[p] || 0) === window.round - 1) penalty += 2;
+    // 출전 횟수가 많을수록 페널티 강화 (출전 불균형 방지)
+    penalty += (window.playCount[p] || 0) * 15;
+    // 직전 라운드에도 뛴 선수가 계속 뛰면 추가 페널티 (연속 경기 억제)
+    if ((window.lastRoundPlayed[p] || 0) === window.round - 1) penalty += 30;
   }
 
   for (const p of waitingPlayers) {
@@ -1544,7 +1726,10 @@ function getRoomMetaState() {
     nextRoundRequestedRound: window.nextRoundRequestedRound,
     eliminationLosses: window.eliminationLosses,
     galgeCount: window.galgeCount,
-    savedRecords: deepCopy(window.savedRecords || [])
+    savedRecords: deepCopy(window.savedRecords || []),
+    currentRoundEliminationOrder: deepCopy(window.currentRoundEliminationOrder || []),
+    matchMakingMode: window.matchMakingMode || 'fairness',
+    fixedWaiting: deepCopy(window.fixedWaiting || [])
   };
 }
 
@@ -1758,7 +1943,8 @@ function getPreCommitStateFromCurrentRound() {
     currentRoundPenalties: deepCopy(window.currentRoundPenalties),
     resultCount: window.resultCount,
     neededResults: window.neededResults,
-    historyLines: getCurrentHistoryLines()
+    historyLines: getCurrentHistoryLines(),
+    eliminationOrder: deepCopy(window.currentRoundEliminationOrder || [])
   };
 }
 
@@ -1981,7 +2167,9 @@ async function makeMatch(skipHostBusyCheck = false, skipHostCheck = false) {
       return;
     }
 
-    const plan = chooseBestSchedule(window.players);
+    const plan = window.matchMakingMode === 'dopamine'
+      ? chooseBestScheduleDopamine(window.players)
+      : chooseBestSchedule(window.players);
     if (!plan || !plan.matches.length) {
       showAlert("대진 생성 실패");
       return;
@@ -2545,8 +2733,13 @@ async function loadRoomStateFromServer() {
   window.eliminationLosses = typeof meta.eliminationLosses === "number" ? meta.eliminationLosses : window.eliminationLosses;
   window.galgeCount = typeof meta.galgeCount === "number" ? meta.galgeCount : (window.galgeCount || 3);
   window.savedRecords = deepCopy(meta.savedRecords || window.savedRecords || []);
+  window.currentRoundEliminationOrder = deepCopy(meta.currentRoundEliminationOrder || []);
+  window.matchMakingMode = meta.matchMakingMode || 'fairness';
+  window.fixedWaiting = deepCopy(meta.fixedWaiting || []);
   updateEliminationLossesUI();
   updateGalgeCountUI();
+  updateMatchMakingModeUI();
+  updateFixedWaitingList();
 
 
 
@@ -3139,7 +3332,7 @@ function updatePlayerUI() {
 }
 
 async function persistPlayerInputs() {
-  if (!window.isHost) return;
+  if (!window.isHost && !window.isAdmin) return;
   try {
     markRoomReloadSuppressed(3000);
     await saveRoomStateOnly();
@@ -3445,13 +3638,18 @@ function computeGalgeFromSnapshots() {
     }
 
     // eliminationOrder에 없지만 탈락된 선수 (이전 버전 호환)
-    Object.keys(afterLoss).forEach(p => {
-      if ((afterLoss[p] || 0) >= elim && (beforeLoss[p] || 0) < elim && !history.includes(p)) {
+    // 같은 라운드에서 탈락한 선수들은 동일한 batchOrder를 부여해야 슈퍼깔개 판정이 정확함
+    const fallbackBatch = Object.keys(afterLoss).filter(p =>
+      (afterLoss[p] || 0) >= elim && (beforeLoss[p] || 0) < elim && !history.includes(p)
+    );
+    if (fallbackBatch.length > 0) {
+      const batchOrder = history.length + 1;
+      for (const p of fallbackBatch) {
         history.push(p);
         roundOf[p] = roundNo;
-        orderOf[p] = history.length;
+        orderOf[p] = batchOrder;
       }
-    });
+    }
   }
 
   // 현재 진행 중인 라운드(또는 복구된 라운드)에서 추가 탈락 감지
@@ -3473,13 +3671,18 @@ function computeGalgeFromSnapshots() {
       }
     }
 
-    Object.keys(window.loss).forEach(p => {
-      if ((window.loss[p] || 0) >= elim && (lastCommittedLoss[p] || 0) < elim && !history.includes(p)) {
+    // 현재 라운드 폴백: 같은 라운드 탈락자는 동일 batchOrder 부여
+    const currentFallbackBatch = Object.keys(window.loss).filter(p =>
+      (window.loss[p] || 0) >= elim && (lastCommittedLoss[p] || 0) < elim && !history.includes(p)
+    );
+    if (currentFallbackBatch.length > 0) {
+      const batchOrder = history.length + 1;
+      for (const p of currentFallbackBatch) {
         history.push(p);
         roundOf[p] = window.round;
-        orderOf[p] = history.length;
+        orderOf[p] = batchOrder;
       }
-    });
+    }
   }
 
   return { history, roundOf, orderOf };

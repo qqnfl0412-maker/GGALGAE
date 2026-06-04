@@ -112,6 +112,15 @@
           <div id="galgeCountStatus" class="small">현재 설정: 3명</div>
         </div>
 
+        <div class="card hostOnly">
+          <h3>대진 모드</h3>
+          <div class="btn-grid-2" style="margin-bottom: 8px;">
+            <button id="modeBtn_fairness" type="button" onclick="setMatchMakingMode('fairness')">형평성 모드</button>
+            <button id="modeBtn_dopamine" type="button" class="secondary" onclick="setMatchMakingMode('dopamine')">도파민 모드</button>
+          </div>
+          <div id="matchMakingModeStatus" class="small">현재 모드: 형평성</div>
+        </div>
+
         <div id="playersPreviewHidden" style="display:none;"><div id="playersPreview"></div></div>
       </section>
 
@@ -224,6 +233,18 @@
             <button type="button" onclick="addFixedTeam()">고정팀 추가</button>
           </div>
           <div id="fixedList" class="small">설정된 고정팀 없음</div>
+        </div>
+
+        <div class="card hostOnly">
+          <h3>대기 인원 <span class="room-badge">방장 전용</span></h3>
+          <div class="input-grid-2" style="margin-bottom: 8px;">
+            <select id="fixedWait1" onchange=""><option value="">선수 선택</option></select>
+            <select id="fixedWaitRound"><option value="">라운드 선택</option></select>
+          </div>
+          <div class="btn-grid-1" style="margin-bottom: 8px;">
+            <button type="button" onclick="addFixedWaiting()">대기 추가</button>
+          </div>
+          <div id="fixedWaitingList" class="small">설정된 대기 인원 없음</div>
         </div>
 
         <div class="card hostOnly">
