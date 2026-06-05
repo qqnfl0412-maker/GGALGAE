@@ -379,6 +379,27 @@ function addHistory(text) {
   renderHistory();
 }
 
+// 히스토리 매치 라인에서 선수 정보를 파싱하는 헬퍼
+function parseMatchLine(line) {
+  const lastParen = line.lastIndexOf(' (');
+  if (lastParen < 0 || !line.endsWith(' 승)')) return null;
+  const winnerStr = line.slice(lastParen + 2, line.length - 3);
+  const mainPart = line.slice(0, lastParen);
+  const colonIdx = mainPart.indexOf(' : ');
+  if (colonIdx < 0) return null;
+  const sideA = mainPart.slice(0, colonIdx).trim();
+  const sideB = mainPart.slice(colonIdx + 3).trim();
+  const sideAParts = sideA.split(' ');
+  const sideBParts = sideB.split(' ');
+  const teamAStr = sideAParts.slice(0, -1).join(' ');
+  const teamBStr = sideBParts.slice(1).join(' ');
+  const teamA = teamAStr.split('/').filter(Boolean);
+  const teamB = teamBStr.split('/').filter(Boolean);
+  const winnerTeam = winnerStr.split('/').filter(Boolean);
+  const loserTeam = [...teamA, ...teamB].filter(p => !winnerTeam.includes(p));
+  return { teamA, teamB, winnerTeam, loserTeam, allPlayers: [...teamA, ...teamB] };
+}
+
 function renderMatchLine(line) {
   const lastParen = line.lastIndexOf(' (');
   if (lastParen < 0 || !line.endsWith(' 승)')) {
@@ -409,11 +430,38 @@ function renderHistoryLines(lines) {
   if (!lines || !lines.length) return '';
   const sections = parseHistorySections(lines);
   const rounds = Object.keys(sections).map(Number).sort((a, b) => a - b);
+
+  // 사전 패스: 라운드별 누적 패 수와 전체 선수 목록 수집
+  const allPlayersSet = new Set();
+  const cumulativeLosses = {};
+  const lossesBeforeRound = {};
+
+  for (const roundNo of rounds) {
+    lossesBeforeRound[roundNo] = { ...cumulativeLosses };
+    const roundLines = sections[roundNo].filter(l => !/^===== Round \d+ =====$/.test(l));
+    for (const line of roundLines) {
+      if (line.includes(' : ') && line.lastIndexOf(' (') >= 0 && line.endsWith(' 승)')) {
+        const parsed = parseMatchLine(line);
+        if (parsed) {
+          parsed.allPlayers.forEach(p => allPlayersSet.add(p));
+          parsed.loserTeam.forEach(p => { cumulativeLosses[p] = (cumulativeLosses[p] || 0) + 1; });
+        }
+      }
+    }
+  }
+
+  // 탈락 기준 추정: window 설정 or 누적 패 최댓값
+  const maxLosses = Object.values(cumulativeLosses).reduce((m, v) => Math.max(m, v), 0);
+  const eliminationLosses = window.eliminationLosses || Math.max(maxLosses, 3);
+
+  // 렌더링 패스
   let html = '';
   for (const roundNo of rounds) {
     const roundLines = sections[roundNo].filter(l => !/^===== Round \d+ =====$/.test(l));
     const matchResults = [], handicaps = [];
     let waitingPlayers = null;
+    const playingThisRound = [];
+
     for (const line of roundLines) {
       if (line.startsWith('대기 : ')) {
         waitingPlayers = line.slice('대기 : '.length).split(' / ').join(', ');
@@ -421,8 +469,21 @@ function renderHistoryLines(lines) {
         handicaps.push(line);
       } else if (line.includes(' : ') && line.lastIndexOf(' (') >= 0 && line.endsWith(' 승)')) {
         matchResults.push(line);
+        const parsed = parseMatchLine(line);
+        if (parsed) parsed.allPlayers.forEach(p => playingThisRound.push(p));
       }
     }
+
+    // 대기 선수가 저장되지 않은 경우 역추산
+    if (!waitingPlayers && matchResults.length > 0 && allPlayersSet.size > 0) {
+      const lossState = lossesBeforeRound[roundNo] || {};
+      const activePlayers = [...allPlayersSet].filter(p => (lossState[p] || 0) < eliminationLosses);
+      const inferred = activePlayers.filter(p => !playingThisRound.includes(p));
+      if (inferred.length > 0) {
+        waitingPlayers = inferred.join(', ') + ' *';
+      }
+    }
+
     html += `<div class="hist-round"><div class="hist-round-header">Round ${roundNo}</div>`;
     for (const ml of matchResults) html += renderMatchLine(ml);
     for (const hl of handicaps) html += `<div class="hist-handicap">${hl}</div>`;
@@ -1022,6 +1083,69 @@ function resetLocalStateOnly() {
   updateGalgeList();
 }
 
+function resetRoundAndHistoryLocalState() {
+  window.fixedTeams = [];
+  window.currentMatches = [];
+  window.currentWaitingPlayers = [];
+  window.currentRoundPenalties = [];
+  window.currentRoundHistoryLines = [];
+
+  window.round = 0;
+  window.resultCount = 0;
+  window.neededResults = 0;
+
+  window.currentScoreMatch = -1;
+  window.roundLocked = false;
+  window.editMode = false;
+  window.currentRoundEliminationOrder = [];
+  window.fixedWaiting = [];
+  window.restoredCompletedRound = false;
+  window.restoredSnapshotIndex = -1;
+  window.participantCanSeeNextRound = false;
+
+  window.nextRoundRequestId = "";
+  window.nextRoundRequestedRound = 0;
+  window.lastHandledNextRoundRequestId = "";
+
+  window.teamPairCount = {};
+  window.opponentPairCount = {};
+  window.playCount = {};
+  window.restCount = {};
+  window.lastRoundPlayed = {};
+  window.lastRoundRest = {};
+  window.recentTeammates = [];
+  window.recentOpponents = [];
+
+  window.roundSnapshots = [];
+  window.savedRecords = [];
+
+  window.matchSaveTimers = {};
+  window.localMatchDirtyUntil = {};
+  window.suppressRoomReloadUntil = 0;
+  window.suppressMatchesReloadUntil = 0;
+  window.scoreInputBusy = false;
+
+  const matchEl = document.getElementById("match");
+  const scoreEl = document.getElementById("score");
+  const fixedListEl = document.getElementById("fixedList");
+  const waitingEl = document.getElementById("waitingPlayers");
+
+  if (matchEl) matchEl.innerHTML = "";
+  if (scoreEl) scoreEl.innerHTML = "";
+  if (fixedListEl) fixedListEl.innerHTML = "설정된 고정팀 없음";
+  if (waitingEl) waitingEl.innerText = "없음";
+
+  renderHistory();
+  updatePenaltyList();
+  refreshRoundActionButtons();
+  updateCurrentRoundLabel();
+  updatePlayersPreview();
+  renderScoreMatchList();
+  updateFloatingRoomStatus();
+  clearSelectedMatch();
+  updateGalgeList();
+}
+
 async function resetAll() {
   if (!ensureHost("전체 초기화")) return;
   if (!beginHostAction()) return;
@@ -1031,18 +1155,44 @@ async function resetAll() {
       showAlert("먼저 방에 연결해줘.");
       return;
     }
-    if (!await showConfirm("현재 방 상태를 전체 초기화할까요?")) return;
+    if (!await showConfirm("라운드와 기록을 초기화할까요?\n참가자 정보는 유지됩니다.")) return;
 
-    resetLocalStateOnly();
+    resetRoundAndHistoryLocalState();
 
-    const roomMeta = getRoomMetaState();
+    const resetMeta = {
+      playerInputs: getPlayerInputs(),
+      teamPairCount: {},
+      opponentPairCount: {},
+      playCount: {},
+      restCount: {},
+      lastRoundPlayed: {},
+      lastRoundRest: {},
+      recentTeammates: [],
+      recentOpponents: [],
+      roundSnapshots: [],
+      currentRoundPenalties: [],
+      resultCount: 0,
+      neededResults: 0,
+      restoredCompletedRound: false,
+      restoredSnapshotIndex: -1,
+      nextRoundRequestId: "",
+      nextRoundRequestedRound: 0,
+      eliminationLosses: window.eliminationLosses,
+      galgeCount: window.galgeCount,
+      savedRecords: [],
+      currentRoundEliminationOrder: [],
+      matchMakingMode: window.matchMakingMode || 'fairness',
+      fixedWaiting: [],
+      currentRoundHistoryLines: []
+    };
+
     const roomPayload = {
       round_no: 0,
       round_locked: false,
       waiting_players: [],
-      loss_state: {},
+      loss_state: deepCopy(window.loss),
       fixed_teams: [],
-      meta_state: roomMeta
+      meta_state: resetMeta
     };
 
     markRoomReloadSuppressed(1200);
@@ -1070,7 +1220,7 @@ async function resetAll() {
       return;
     }
 
-    showAlert("전체 초기화했어.");
+    showAlert("라운드와 기록을 초기화했어. 참가자 정보는 유지됐어.");
   } finally {
     endHostAction();
   }
@@ -1184,6 +1334,32 @@ async function addFixedTeam() {
       return;
     }
 
+    // 이번 라운드에 이미 배치된 고정팀 수 확인
+    const existingForRound = (window.fixedTeams || []).filter(f => f.round === r);
+
+    // 현재 활성 선수 수 기준 최대 코트 수 계산
+    const activePlayers = Object.keys(window.loss || {})
+      .filter(name => (window.loss[name] || 0) < (window.eliminationLosses || 3));
+    const playerCount = Math.max(activePlayers.length, 4);
+    const matchCount = Math.min(Math.floor(playerCount / 4), window.APP_CONFIG.game.maxCourts);
+    const maxFixedTeams = matchCount * 2; // 경기당 2팀
+
+    if (existingForRound.length >= maxFixedTeams) {
+      showAlert(`${r}라운드에는 최대 ${maxFixedTeams}팀까지만 고정할 수 있어.\n(선수 ${playerCount}명 기준 ${matchCount}경기)`);
+      return;
+    }
+
+    // 같은 라운드에 이미 배치된 선수인지 확인
+    const usedPlayers = existingForRound.flatMap(f => [f.p1, f.p2]);
+    if (usedPlayers.includes(p1)) {
+      showAlert(`'${p1}' 선수는 ${r}라운드에 이미 다른 고정팀으로 배치되어 있어.`);
+      return;
+    }
+    if (usedPlayers.includes(p2)) {
+      showAlert(`'${p2}' 선수는 ${r}라운드에 이미 다른 고정팀으로 배치되어 있어.`);
+      return;
+    }
+
     window.fixedTeams.push({ p1, p2, round: r });
     updateFixedList();
     await saveRoomStateOnly();
@@ -1292,24 +1468,20 @@ function chooseBestScheduleDopamine(activePlayers) {
 
   const neededPlayers = matchCount * 4;
   const waitingCount  = activePlayers.length - neededPlayers;
-  const fixedTeam     = getRoundFixedTeam(activePlayers);
+  const fixedTeamsList = getRoundFixedTeams(activePlayers);
+  const fixedPlayersFlat = fixedTeamsList.flat();
 
-  const waitingPlayers  = chooseWaitingPlayers(activePlayers, waitingCount, fixedTeam);
+  const waitingPlayers  = chooseWaitingPlayers(activePlayers, waitingCount, fixedPlayersFlat);
   const playingPlayers  = activePlayers.filter(p => !waitingPlayers.includes(p));
 
   // 완전 랜덤 섞기 (이전 기록 무시)
-  const shuffled = [...playingPlayers];
-  shuffle(shuffled);
+  // 고정팀 선수들을 먼저 배치하고 나머지를 랜덤으로 섞음
+  const fixedPlayersInGame = fixedTeamsList.flat().filter(p => playingPlayers.includes(p));
+  const nonFixedPlayers = playingPlayers.filter(p => !fixedPlayersInGame.includes(p));
+  shuffle(nonFixedPlayers);
 
-  // 고정팀이 있으면 그 팀을 첫 번째 팀으로 배치
-  if (fixedTeam && shuffled.includes(fixedTeam[0]) && shuffled.includes(fixedTeam[1])) {
-    const idxA = shuffled.indexOf(fixedTeam[0]);
-    const idxB = shuffled.indexOf(fixedTeam[1]);
-    shuffled.splice(idxB, 1);
-    shuffled.splice(idxA, 1);
-    shuffled.unshift(fixedTeam[1]);
-    shuffled.unshift(fixedTeam[0]);
-  }
+  // 고정팀은 순서대로 앞에 배치: [t1p1, t1p2, t2p1, t2p2, ...random...]
+  const shuffled = [...fixedTeamsList.flatMap(t => t), ...nonFixedPlayers];
 
   const matches = [];
   for (let i = 0; i < matchCount; i++) {
@@ -1370,6 +1542,14 @@ async function addFixedWaiting() {
     const exists = window.fixedWaiting.some(fw => fw.player === p && fw.round === r);
     if (exists) { showAlert("이미 설정된 대기 인원이야."); return; }
 
+    // 해당 라운드 고정팀에 이미 배치된 선수면 경고
+    const fixedForRound = (window.fixedTeams || []).filter(f => f.round === r);
+    const inFixedTeam = fixedForRound.some(f => f.p1 === p || f.p2 === p);
+    if (inFixedTeam) {
+      await showAlert("배치되어 있습니다.");
+      return;
+    }
+
     window.fixedWaiting.push({ player: p, round: r });
     updateFixedWaitingList();
     await saveRoomStateOnly();
@@ -1415,11 +1595,19 @@ function updateFixedWaitingList() {
   el.innerHTML = html;
 }
 
+// 현재 라운드의 고정팀 전체를 배열로 반환 [[p1,p2], [p3,p4], ...]
+function getRoundFixedTeams(activePlayers) {
+  return (window.fixedTeams || [])
+    .filter(f => f.round === window.round
+      && activePlayers.includes(f.p1)
+      && activePlayers.includes(f.p2))
+    .map(f => [f.p1, f.p2]);
+}
+
+// 하위 호환: 첫 번째 고정팀만 반환 (null 가능)
 function getRoundFixedTeam(activePlayers) {
-  const fixed = window.fixedTeams.find(f => f.round === window.round);
-  if (!fixed) return null;
-  if (!activePlayers.includes(fixed.p1) || !activePlayers.includes(fixed.p2)) return null;
-  return [fixed.p1, fixed.p2];
+  const teams = getRoundFixedTeams(activePlayers);
+  return teams.length > 0 ? teams[0] : null;
 }
 
 function chooseWaitingPlayers(activePlayers, waitingCount, fixedTeam) {
@@ -1448,7 +1636,7 @@ function chooseWaitingPlayers(activePlayers, waitingCount, fixedTeam) {
   for (const group of candidates) {
     let score = 0;
     for (const p of group) {
-      score += (window.restCount[p] || 0) * -30;
+      score += (window.restCount[p] || 0) * 30;
       if ((window.lastRoundRest[p] || 0) === window.round - 1) score += 200;
       // 직전 라운드에 경기한 선수는 강하게 대기 우선 (연속 경기 방지)
       if ((window.lastRoundPlayed[p] || 0) === window.round - 1) score += -200;
@@ -1471,31 +1659,26 @@ function chooseWaitingPlayers(activePlayers, waitingCount, fixedTeam) {
   return [...mandatoryWait, ...chosen];
 }
 
-function generatePairings(playersToPair, fixedTeam = null) {
+// fixedTeams: [[p1,p2], [p3,p4], ...] 형태의 배열 (없으면 [])
+function generatePairings(playersToPair, fixedTeams = []) {
   const results = [];
+  const fixedPlayers = fixedTeams.flat();
+  const remaining = playersToPair.filter(p => !fixedPlayers.includes(p));
 
-  function helper(remaining, currentTeams) {
-    if (remaining.length === 0) {
+  function helper(rem, currentTeams) {
+    if (rem.length === 0) {
       results.push(currentTeams.map(team => [...team]));
       return;
     }
-
-    const first = remaining[0];
-    for (let i = 1; i < remaining.length; i++) {
-      const second = remaining[i];
-      const team = [first, second];
-      const rest = remaining.filter((_, idx) => idx !== 0 && idx !== i);
-      helper(rest, [...currentTeams, team]);
+    const first = rem[0];
+    for (let i = 1; i < rem.length; i++) {
+      const second = rem[i];
+      const rest = rem.filter((_, idx) => idx !== 0 && idx !== i);
+      helper(rest, [...currentTeams, [first, second]]);
     }
   }
 
-  if (fixedTeam) {
-    const remaining = playersToPair.filter(p => !fixedTeam.includes(p));
-    helper(remaining, [fixedTeam]);
-  } else {
-    helper(playersToPair, []);
-  }
-
+  helper(remaining, fixedTeams.map(t => [...t]));
   return results;
 }
 
@@ -1558,7 +1741,7 @@ function getBalancePenalty(playingPlayers, waitingPlayers) {
   }
 
   for (const p of waitingPlayers) {
-    penalty += (window.restCount[p] || 0) * -5;
+    penalty += (window.restCount[p] || 0) * 5;
   }
 
   return penalty;
@@ -1570,12 +1753,14 @@ function chooseBestSchedule(activePlayers) {
 
   const neededPlayers = matchCount * 4;
   const waitingCount = activePlayers.length - neededPlayers;
-  const fixedTeam = getRoundFixedTeam(activePlayers);
+  // 이번 라운드의 모든 고정팀을 가져옴 (다중 고정팀 지원)
+  const fixedTeamsList = getRoundFixedTeams(activePlayers);
+  const fixedPlayersFlat = fixedTeamsList.flat();
 
-  const waitingPlayers = chooseWaitingPlayers(activePlayers, waitingCount, fixedTeam);
+  const waitingPlayers = chooseWaitingPlayers(activePlayers, waitingCount, fixedPlayersFlat);
   const playingPlayers = activePlayers.filter(p => !waitingPlayers.includes(p));
 
-  const allTeamCombos = generatePairings(playingPlayers, fixedTeam);
+  const allTeamCombos = generatePairings(playingPlayers, fixedTeamsList);
   const candidates = [];
 
   for (const teams of allTeamCombos) {
@@ -1729,7 +1914,8 @@ function getRoomMetaState() {
     savedRecords: deepCopy(window.savedRecords || []),
     currentRoundEliminationOrder: deepCopy(window.currentRoundEliminationOrder || []),
     matchMakingMode: window.matchMakingMode || 'fairness',
-    fixedWaiting: deepCopy(window.fixedWaiting || [])
+    fixedWaiting: deepCopy(window.fixedWaiting || []),
+    currentRoundHistoryLines: deepCopy(window.currentRoundHistoryLines || [])
   };
 }
 
@@ -1749,17 +1935,22 @@ async function saveRoomStateOnly() {
     meta_state: getRoomMetaState()
   };
 
-  const { error } = await window.supabaseClient
-    .from("match_rooms")
-    .update(roomPayload)
-    .eq("room_code", window.currentRoomCode);
-
-  if (error) {
-    console.error(error);
-    setSyncStatus("방 상태 저장 실패");
-  } else {
-    setSyncStatus("실시간 반영 중");
+  // 네트워크 오류 시 최대 3회 재시도 (경기 기록 누락 방지)
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, 400 * attempt));
+    const { error } = await window.supabaseClient
+      .from("match_rooms")
+      .update(roomPayload)
+      .eq("room_code", window.currentRoomCode);
+    if (!error) {
+      setSyncStatus("실시간 반영 중");
+      return;
+    }
+    lastError = error;
   }
+  console.error("saveRoomStateOnly 최종 실패:", lastError);
+  setSyncStatus("저장 실패 ⚠ 네트워크 확인");
 }
 
 async function saveSingleMatchToServer(index) {
@@ -2776,7 +2967,30 @@ async function loadRoomStateFromServer() {
     };
   });
 
-  window.currentRoundHistoryLines = buildHistoryFromServerState(room, matches || []);
+  // 서버에 저장된 히스토리 라인이 있으면 그것을 우선 사용, 없으면 재구성
+  const metaHistoryLines = deepCopy(meta.currentRoundHistoryLines || []);
+  const builtHistoryLines = buildHistoryFromServerState(room, matches || []);
+  let chosenHistoryLines = metaHistoryLines.length > 0 ? metaHistoryLines : builtHistoryLines;
+
+  // race condition 방지: 라운드 잠금 중 대기 선수가 서버에 있으나 히스토리에 누락된 경우 보완
+  if (room.round_locked && (room.waiting_players || []).length > 0) {
+    const currentRoundHeader = `===== Round ${room.round_no} =====`;
+    const headerIdx = chosenHistoryLines.lastIndexOf(currentRoundHeader);
+    if (headerIdx >= 0) {
+      const afterHeader = chosenHistoryLines.slice(headerIdx + 1);
+      const hasWaiting = afterHeader.some(l => l.startsWith('대기 : '));
+      if (!hasWaiting) {
+        const waitingLine = `대기 : ${room.waiting_players.join(" / ")}`;
+        chosenHistoryLines = [
+          ...chosenHistoryLines.slice(0, headerIdx + 1),
+          waitingLine,
+          ...chosenHistoryLines.slice(headerIdx + 1)
+        ];
+      }
+    }
+  }
+
+  window.currentRoundHistoryLines = chosenHistoryLines;
 
   collectPlayers();
   updateFixedList();
