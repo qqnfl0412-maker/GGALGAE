@@ -775,6 +775,12 @@ button:disabled {
   font-weight: 900;
   color: #1a1d27;
   letter-spacing: -0.3px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.records-detail-title[style*="cursor: pointer"]:hover,
+.records-detail-title[style*="cursor:pointer"]:hover {
+  background: #f0f4ff;
 }
 
 .records-detail-body {

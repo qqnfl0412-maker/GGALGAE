@@ -4061,6 +4061,7 @@ function triggerPWAInstall() {
    기록 저장 / 조회 / 삭제
 ════════════════════════════════ */
 window._currentViewingRecord = null;
+window._adminAllRecords = null; // 관리자 전체 기록 모드일 때 사용
 
 function generateRecordName() {
   const now = new Date();
@@ -4099,19 +4100,80 @@ async function saveCurrentRecord() {
   showAlert(`"${name}" 이름으로 저장됐어.`);
 }
 
+async function loadAllAdminRecords() {
+  if (!window.isAdmin || !window.supabaseClient) return [];
+  if (!window.supabaseClient) initSupabase();
+
+  const { data, error } = await window.supabaseClient
+    .from("match_rooms")
+    .select("room_code, meta_state");
+
+  if (error || !data) return [];
+
+  const allRecords = [];
+  for (const room of data) {
+    const meta = room.meta_state || {};
+    const records = meta.savedRecords || [];
+    for (const rec of records) {
+      allRecords.push({ ...rec, roomCode: room.room_code });
+    }
+  }
+  return allRecords.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+async function saveRecordToRoom(roomCode, updatedRecords) {
+  if (!window.supabaseClient || !roomCode) return false;
+
+  const { data: roomData, error: fetchErr } = await window.supabaseClient
+    .from("match_rooms")
+    .select("meta_state")
+    .eq("room_code", roomCode)
+    .maybeSingle();
+
+  if (fetchErr || !roomData) return false;
+
+  const meta = deepCopy(roomData.meta_state || {});
+  meta.savedRecords = updatedRecords;
+
+  const { error } = await window.supabaseClient
+    .from("match_rooms")
+    .update({ meta_state: meta })
+    .eq("room_code", roomCode);
+
+  return !error;
+}
+
 function showRecordsList() {
   const modal = document.getElementById("recordsListModal");
   if (!modal) return;
   const container = document.getElementById("recordsListContainer");
+
+  if (window.isAdmin) {
+    container.innerHTML = `<div class="small" style="text-align:center;padding:8px 0;">불러오는 중...</div>`;
+    modal.classList.remove("hidden");
+    loadAllAdminRecords().then(records => {
+      window._adminAllRecords = records;
+      _renderRecordsList(records, true);
+    });
+    return;
+  }
+
+  window._adminAllRecords = null;
   const records = (window.savedRecords || []).slice().sort((a, b) => a.timestamp - b.timestamp);
+  _renderRecordsList(records, false);
+  modal.classList.remove("hidden");
+}
+
+function _renderRecordsList(records, showRoom) {
+  const container = document.getElementById("recordsListContainer");
   if (records.length === 0) {
     container.innerHTML = `<div class="small" style="text-align:center;padding:20px 0;">저장된 기록이 없어.</div>`;
   } else {
-    container.innerHTML = records.map(r =>
-      `<div class="record-list-item" data-rname="${escapeHTML(r.name)}" onclick="showRecordDetail(this.dataset.rname)">${escapeHTML(r.name)}</div>`
-    ).join("");
+    container.innerHTML = records.map((r, idx) => {
+      const roomTag = showRoom ? ` <span class="small" style="color:#888;font-weight:400;">(${escapeHTML(r.roomCode || "-")})</span>` : "";
+      return `<div class="record-list-item" data-ridx="${idx}" onclick="showRecordDetail(${idx})">${escapeHTML(r.name)}${roomTag}</div>`;
+    }).join("");
   }
-  modal.classList.remove("hidden");
 }
 
 function closeRecordsListModal() {
@@ -4119,11 +4181,16 @@ function closeRecordsListModal() {
   if (modal) modal.classList.add("hidden");
 }
 
-function showRecordDetail(name) {
-  const record = (window.savedRecords || []).find(r => r.name === name);
+function showRecordDetail(idx) {
+  const list = window._adminAllRecords !== null ? window._adminAllRecords : (window.savedRecords || []).slice().sort((a, b) => a.timestamp - b.timestamp);
+  const record = list[idx];
   if (!record) return;
   window._currentViewingRecord = record;
-  document.getElementById("recordDetailTitle").innerText = record.name;
+  const titleEl = document.getElementById("recordDetailTitle");
+  titleEl.innerText = record.name;
+  titleEl.title = "클릭하여 제목 수정";
+  titleEl.style.cursor = "pointer";
+  titleEl.onclick = () => startEditRecordTitle();
   document.getElementById("recordDetailRoomBtn").innerText = `방 코드: ${record.roomCode || "-"}`;
   const body = document.getElementById("recordDetailBody");
   body.innerHTML = `
@@ -4145,6 +4212,83 @@ function showRecordDetail(name) {
   if (detailModal) detailModal.classList.remove("hidden");
 }
 
+function startEditRecordTitle() {
+  const record = window._currentViewingRecord;
+  if (!record) return;
+  const titleEl = document.getElementById("recordDetailTitle");
+  const currentName = record.name;
+
+  titleEl.onclick = null;
+  titleEl.innerHTML = `<input id="recordTitleInput" type="text" value="${escapeHTML(currentName)}" maxlength="50" style="font-size:inherit;font-weight:inherit;color:inherit;border:none;border-bottom:2px solid #4f8ef7;background:transparent;width:100%;outline:none;padding:2px 0;">`;
+  const input = document.getElementById("recordTitleInput");
+  if (input) {
+    input.focus();
+    input.select();
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); saveRecordTitle(input.value); }
+      if (e.key === "Escape") { cancelEditRecordTitle(currentName); }
+    });
+    input.addEventListener("blur", () => saveRecordTitle(input.value));
+  }
+}
+
+function cancelEditRecordTitle(originalName) {
+  const titleEl = document.getElementById("recordDetailTitle");
+  if (!titleEl) return;
+  titleEl.innerText = originalName;
+  titleEl.onclick = () => startEditRecordTitle();
+}
+
+let _savingRecordTitle = false;
+async function saveRecordTitle(newName) {
+  if (_savingRecordTitle) return;
+  _savingRecordTitle = true;
+  newName = (newName || "").trim();
+  const record = window._currentViewingRecord;
+  if (!record) { _savingRecordTitle = false; return; }
+
+  const titleEl = document.getElementById("recordDetailTitle");
+  if (!newName || newName === record.name) {
+    _savingRecordTitle = false;
+    cancelEditRecordTitle(record.name);
+    return;
+  }
+
+  const oldName = record.name;
+  record.name = newName;
+  if (titleEl) {
+    titleEl.innerText = newName;
+    titleEl.onclick = () => startEditRecordTitle();
+  }
+
+  const roomCode = record.roomCode;
+
+  try {
+    if (window._adminAllRecords !== null) {
+      const { data: roomData, error: fetchErr } = await window.supabaseClient
+        .from("match_rooms")
+        .select("meta_state")
+        .eq("room_code", roomCode)
+        .maybeSingle();
+
+      if (!fetchErr && roomData) {
+        const meta = deepCopy(roomData.meta_state || {});
+        const recs = meta.savedRecords || [];
+        const target = recs.find(r => r.name === oldName);
+        if (target) target.name = newName;
+        meta.savedRecords = recs;
+        await window.supabaseClient.from("match_rooms").update({ meta_state: meta }).eq("room_code", roomCode);
+      }
+    } else {
+      const target = (window.savedRecords || []).find(r => r.name === oldName);
+      if (target) target.name = newName;
+      saveRoomStateOnly();
+    }
+  } finally {
+    _savingRecordTitle = false;
+  }
+}
+
 function closeRecordDetail() {
   const modal = document.getElementById("recordDetailModal");
   if (modal) modal.classList.add("hidden");
@@ -4163,7 +4307,7 @@ function closeDeleteRecordModal() {
   if (modal) modal.classList.add("hidden");
 }
 
-function confirmDeleteRecord() {
+async function confirmDeleteRecord() {
   const pw = (document.getElementById("deleteRecordPwInput")?.value || "").trim();
   if (pw !== "j1037") {
     showAlert("비밀번호가 틀렸어.");
@@ -4171,12 +4315,29 @@ function confirmDeleteRecord() {
   }
   const record = window._currentViewingRecord;
   if (!record) return;
-  window.savedRecords = (window.savedRecords || []).filter(r => r.name !== record.name);
+  const roomCode = record.roomCode;
+  const recordName = record.name;
   window._currentViewingRecord = null;
   closeDeleteRecordModal();
   const detailModal = document.getElementById("recordDetailModal");
   if (detailModal) detailModal.classList.add("hidden");
-  saveRoomStateOnly();
+
+  if (window._adminAllRecords !== null) {
+    const { data: roomData, error: fetchErr } = await window.supabaseClient
+      .from("match_rooms")
+      .select("meta_state")
+      .eq("room_code", roomCode)
+      .maybeSingle();
+    if (!fetchErr && roomData) {
+      const meta = deepCopy(roomData.meta_state || {});
+      meta.savedRecords = (meta.savedRecords || []).filter(r => r.name !== recordName);
+      await window.supabaseClient.from("match_rooms").update({ meta_state: meta }).eq("room_code", roomCode);
+    }
+  } else {
+    window.savedRecords = (window.savedRecords || []).filter(r => r.name !== recordName);
+    saveRoomStateOnly();
+  }
+
   showRecordsList();
 }
 
