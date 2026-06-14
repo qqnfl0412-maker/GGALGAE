@@ -2620,10 +2620,12 @@ async function checkRoundEnd() {
     historyLines: deepCopy(nextHistorySeed)
   };
 
-  window.roundSnapshots.push({
+  // snapshotEntry를 로컬 변수에 보관 — 대기 중 loadRoomStateFromServer()가
+  // window.roundSnapshots을 구 서버 상태로 덮어쓸 수 있으므로, 대기 후 재적용
+  const snapshotEntry = {
     completedRoundState: deepCopy(completedRoundState),
     afterCommitState: deepCopy(afterCommitState)
-  });
+  };
 
   window.restoredCompletedRound = false;
   window.restoredSnapshotIndex = -1;
@@ -2637,10 +2639,34 @@ async function checkRoundEnd() {
   refreshRoundActionButtons();
 
   collectPlayers();
-  // Wait for any in-progress server load to finish before saving the round snapshot
+  // 진행 중인 서버 로드가 있으면 완료까지 대기
   for (let _i = 0; _i < 10 && window.isApplyingRemoteState; _i++) {
     await new Promise(r => setTimeout(r, 50));
   }
+
+  // 대기 중 loadRoomStateFromServer()가 window.roundSnapshots을 구 서버 상태([R2])로
+  // 덮어써서 이번 라운드 스냅샷([R3])이 사라졌을 수 있으므로 강제로 재보장
+  const alreadyCommitted = window.roundSnapshots.some(
+    s => s.completedRoundState && s.completedRoundState.round === completedRoundState.round
+  );
+  if (!alreadyCommitted) {
+    window.roundSnapshots.push(snapshotEntry);
+  }
+
+  // 로드로 인해 되돌아갔을 수 있는 커밋 후 통계·상태를 재적용
+  window.loss            = deepCopy(afterCommitState.loss);
+  window.teamPairCount   = deepCopy(afterCommitState.teamPairCount);
+  window.opponentPairCount = deepCopy(afterCommitState.opponentPairCount);
+  window.playCount       = deepCopy(afterCommitState.playCount);
+  window.restCount       = deepCopy(afterCommitState.restCount);
+  window.lastRoundPlayed = deepCopy(afterCommitState.lastRoundPlayed);
+  window.lastRoundRest   = deepCopy(afterCommitState.lastRoundRest);
+  window.recentTeammates = deepCopy(afterCommitState.recentTeammates);
+  window.recentOpponents = deepCopy(afterCommitState.recentOpponents);
+  window.roundLocked     = false;
+  window.restoredCompletedRound  = false;
+  window.restoredSnapshotIndex   = -1;
+
   await saveRoomStateOnly();
   setTimeout(() => loadRoomStateFromServer(), 150);
 
