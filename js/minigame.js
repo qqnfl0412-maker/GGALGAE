@@ -1,10 +1,10 @@
 /* ============================================================
    minigame.js  –  사다리타기 & 핀볼 (Plinko) mini-games
+
    Public API: window.openMiniGame(gameType, players, onResult)
      gameType : 'ladder' | 'plinko'
-     players  : string[] – active player names
+     players  : string[]
      onResult : (orderedPlayers: string[] | null) => void
-                null = cancelled
    ============================================================ */
 
 (function () {
@@ -12,6 +12,9 @@
   let _onResult = null;
   let _orderedPlayers = null;
   let _animFrame = null;
+  let _gameType = null;
+  let _L = null;   // ladder state
+  let _P = null;   // plinko state
 
   const COLORS = [
     '#4f8ef7', '#e85d4a', '#43b97f', '#f7a735',
@@ -20,18 +23,22 @@
   ];
 
   /* ============================================================
-     PUBLIC: open the mini-game modal
+     PUBLIC API
      ============================================================ */
   window.openMiniGame = function (gameType, players, onResult) {
     if (!players || players.length < 2) return;
-    _onResult = onResult;
+    _onResult  = onResult;
     _orderedPlayers = null;
+    _gameType  = gameType;
 
-    const modal   = document.getElementById('miniGameModal');
-    const title   = document.getElementById('miniGameTitle');
-    const canvas  = document.getElementById('miniGameCanvas');
-    const result  = document.getElementById('miniGameResultPanel');
-    const actions = document.getElementById('miniGameActions');
+    const modal    = document.getElementById('miniGameModal');
+    const title    = document.getElementById('miniGameTitle');
+    const startBtn = document.getElementById('miniGameStartBtn');
+    const canvas   = document.getElementById('miniGameCanvas');
+    const result   = document.getElementById('miniGameResultPanel');
+    const actions  = document.getElementById('miniGameActions');
+    const topSlots = document.getElementById('ladderTopSlots');
+    const botSlots = document.getElementById('ladderBottomSlots');
 
     if (!modal || !canvas) return;
 
@@ -39,36 +46,65 @@
     result.innerHTML  = '';
     result.style.display = 'none';
     actions.style.display = 'none';
+    window._closeLadderPicker();
     modal.classList.remove('hidden');
 
-    // Size canvas to content width
+    const courseBtn = document.getElementById('miniGameCourseBtn');
+
+    if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null; }
+    _L = null; _P = null;
+
     requestAnimationFrame(() => {
       const inner = modal.querySelector('.minigame-modal-content');
       const w = inner.clientWidth;
-      const h = Math.round(Math.min(window.innerHeight * 0.52, 380));
-      canvas.width  = w;
-      canvas.height = h;
-
-      if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null; }
-
-      const done = (ordered) => {
-        _orderedPlayers = ordered;
-        _renderResult(players, ordered);
-        actions.style.display = 'flex';
-      };
 
       if (gameType === 'ladder') {
-        _runLadder(canvas, players, done);
+        canvas.width  = w;
+        canvas.height = Math.round(Math.min(window.innerHeight * 0.38, 268));
+        topSlots.style.display = 'flex';
+        botSlots.style.display = 'flex';
+        if (startBtn)  { startBtn.style.display = 'inline-block'; startBtn.disabled = false; }
+        if (courseBtn) courseBtn.style.display = 'none';
+        _initLadder(canvas, players, (ordered) => {
+          _orderedPlayers = ordered;
+          _renderResult(players, ordered);
+          actions.style.display = 'flex';
+        });
       } else {
-        _runPlinko(canvas, players, done);
+        canvas.width  = w;
+        canvas.height = Math.round(Math.min(window.innerHeight * 0.60, 420));
+        topSlots.style.display = 'none';
+        botSlots.style.display = 'none';
+        if (startBtn)  { startBtn.style.display = 'inline-block'; startBtn.disabled = false; }
+        if (courseBtn) { courseBtn.style.display = 'inline-block'; courseBtn.textContent = '코스 1'; }
+        _initPlinko(canvas, players, (ordered) => {
+          _orderedPlayers = ordered;
+          _renderResult(players, ordered);
+          actions.style.display = 'flex';
+        });
       }
     });
   };
 
-  /* ── confirm / cancel buttons ── */
+  window._startMiniGame = function () {
+    if (_gameType === 'ladder' && _L && _L.phase === 'setup') {
+      _startLadderAnim();
+    } else if (_gameType === 'plinko' && _P && _P.phase === 'setup') {
+      _startPlinkoRace();
+    }
+  };
+
+  window._changePlinkoCourse = function () {
+    if (!_P || _P.phase !== 'setup') return;
+    _P.courseIdx = (_P.courseIdx + 1) % _COURSES.length;
+    _P.resolved  = _resolveCourse(_COURSES[_P.courseIdx], _P.W);
+    const courseBtn = document.getElementById('miniGameCourseBtn');
+    if (courseBtn) courseBtn.textContent = `코스 ${_P.courseIdx + 1}`;
+    _drawPlinkoSetup();
+  };
+
   window._confirmMiniGame = function () {
-    const cb = _onResult;
-    const ordered = _orderedPlayers;
+    const cb = _onResult, ordered = _orderedPlayers;
     _closeModal();
     if (cb && ordered) cb(ordered);
   };
@@ -85,29 +121,65 @@
     if (cb) cb(null);
   };
 
+  window._closeLadderPicker = function () {
+    const popup = document.getElementById('ladderPickerPopup');
+    const bd    = document.getElementById('ladderPickerBackdrop');
+    if (popup) popup.classList.add('hidden');
+    if (bd)    bd.classList.add('hidden');
+  };
+
+  window._selectPickerItem = function (idx) {
+    window._closeLadderPicker();
+    if (!_L || _L.phase !== 'setup') return;
+
+    if (_L.pickerType === 'top') {
+      const newPlayer = _L.players[idx];
+      const curPlayer = _L.topAssign[_L.pickerSlotIdx];
+      const otherSlot = _L.topAssign.findIndex(p => p === newPlayer);
+      if (otherSlot >= 0 && otherSlot !== _L.pickerSlotIdx) {
+        _L.topAssign[otherSlot] = curPlayer;
+      }
+      _L.topAssign[_L.pickerSlotIdx] = newPlayer;
+    } else {
+      // Swap bottom order positions
+      const a = _L.pickerSlotIdx, b = idx;
+      const tmp = _L.botOrder[a];
+      _L.botOrder[a] = _L.botOrder[b];
+      _L.botOrder[b] = tmp;
+    }
+    _updateSlotButtons();
+    _drawLadder();
+  };
+
+  /* ============================================================
+     SHARED HELPERS
+     ============================================================ */
   function _closeModal() {
     if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null; }
-    _onResult = null;
-    _orderedPlayers = null;
-    const m = document.getElementById('miniGameModal');
+    _onResult = null; _orderedPlayers = null; _gameType = null; _L = null; _P = null;
+    const m  = document.getElementById('miniGameModal');
     if (m) m.classList.add('hidden');
+    const ts = document.getElementById('ladderTopSlots');
+    const bs = document.getElementById('ladderBottomSlots');
+    if (ts) { ts.style.display = 'none'; ts.innerHTML = ''; }
+    if (bs) { bs.style.display = 'none'; bs.innerHTML = ''; }
+    const cb = document.getElementById('miniGameCourseBtn');
+    if (cb) cb.style.display = 'none';
+    window._closeLadderPicker();
   }
 
-  /* ── result panel ── */
   function _renderResult(players, ordered) {
     const panel = document.getElementById('miniGameResultPanel');
     if (!panel) return;
-    const matchCount = Math.min(Math.floor(ordered.length / 4), 6);
+    const mc = Math.min(Math.floor(ordered.length / 4), 6);
     const lines = [];
-    for (let i = 0; i < matchCount; i++) {
+    for (let i = 0; i < mc; i++) {
       const tA = [ordered[i * 4], ordered[i * 4 + 1]].join(' / ');
       const tB = [ordered[i * 4 + 2], ordered[i * 4 + 3]].join(' / ');
-      lines.push(`<div class="result-line"><span class="result-court">${i + 1}코트</span>  ${_esc(tA)} vs ${_esc(tB)}</div>`);
+      lines.push(`<div class="result-line"><span class="result-court">${i + 1}코트</span> ${_esc(tA)} vs ${_esc(tB)}</div>`);
     }
-    const waiting = ordered.slice(matchCount * 4);
-    if (waiting.length) {
-      lines.push(`<div class="result-line result-wait">대기: ${_esc(waiting.join(' / '))}</div>`);
-    }
+    const wait = ordered.slice(mc * 4);
+    if (wait.length) lines.push(`<div class="result-line result-wait">대기: ${_esc(wait.join(' / '))}</div>`);
     panel.innerHTML = lines.join('');
     panel.style.display = 'block';
   }
@@ -116,180 +188,30 @@
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  function _hexToRgb(hex) {
+    return [
+      parseInt(hex.slice(1, 3), 16),
+      parseInt(hex.slice(3, 5), 16),
+      parseInt(hex.slice(5, 7), 16)
+    ];
+  }
+
   /* ============================================================
-     LADDER GAME  (사다리타기)
+     LADDER GAME
      ============================================================ */
-  function _runLadder(canvas, players, onDone) {
-    const ctx = canvas.getContext('2d');
-    const N   = players.length;
-    const W   = canvas.width;
-    const H   = canvas.height;
 
-    const PAD    = Math.max(18, Math.round(W / (N * 2.5)));  // side padding
-    const usableW = W - PAD * 2;
-    const laneW  = N > 1 ? usableW / (N - 1) : usableW;
-
-    const LABEL_TOP    = 18;
-    const LABEL_BOTTOM = 16;
-    const GRID_TOP     = LABEL_TOP + 14;
-    const GRID_BOTTOM  = H - LABEL_BOTTOM - 18;
-    const GRID_H       = GRID_BOTTOM - GRID_TOP;
-
-    const NUM_ROWS = Math.max(8, Math.min(12, N + 4));
-    const rowH     = GRID_H / NUM_ROWS;
-
-    const rungs  = _genLadder(N, NUM_ROWS);
-    const finals = players.map((_, i) => _traceLadder(rungs, i, NUM_ROWS));
-
-    // orderedPlayers: finalPosition → player name
-    const posToPlayer = new Array(N);
-    players.forEach((p, i) => { posToPlayer[finals[i]] = p; });
-
-    const DURATION = 2400; // ms
-    let startTs = null;
-
-    function laneX(i) { return PAD + i * laneW; }
-
-    function getMarker(playerIdx, progress) {
-      let lane = playerIdx;
-      const totalDist = NUM_ROWS;
-      const currentDist = progress * totalDist;
-      const done  = Math.floor(currentDist);
-      const frac  = currentDist - done;
-
-      for (let r = 0; r < Math.min(done, NUM_ROWS); r++) {
-        if (lane < N - 1 && rungs[r][lane])       lane++;
-        else if (lane > 0 && rungs[r][lane - 1])  lane--;
-      }
-
-      let x = laneX(lane);
-      // Interpolate horizontal movement through the rung midpoint
-      if (done < NUM_ROWS) {
-        const row = rungs[done];
-        if (lane < N - 1 && row[lane] && frac >= 0.4) {
-          const t = (frac - 0.4) / 0.6;
-          x = laneX(lane) + (laneX(lane + 1) - laneX(lane)) * t;
-        } else if (lane > 0 && row[lane - 1] && frac >= 0.4) {
-          const t = (frac - 0.4) / 0.6;
-          x = laneX(lane) + (laneX(lane - 1) - laneX(lane)) * t;
-        }
-      }
-
-      const y = GRID_TOP + Math.min(progress * (GRID_H + rowH), GRID_H);
-      return { x, y };
-    }
-
-    function draw(ts) {
-      if (!startTs) startTs = ts;
-      const progress = Math.min((ts - startTs) / DURATION, 1);
-
-      ctx.clearRect(0, 0, W, H);
-      ctx.fillStyle = '#131620';
-      ctx.fillRect(0, 0, W, H);
-
-      // Lane lines
-      ctx.strokeStyle = '#3a4060';
-      ctx.lineWidth = 2;
-      for (let i = 0; i < N; i++) {
-        const x = laneX(i);
-        ctx.beginPath();
-        ctx.moveTo(x, GRID_TOP);
-        ctx.lineTo(x, GRID_BOTTOM);
-        ctx.stroke();
-      }
-
-      // Rungs
-      ctx.lineWidth = 2;
-      for (let r = 0; r < NUM_ROWS; r++) {
-        const y = GRID_TOP + r * rowH + rowH * 0.5;
-        for (let c = 0; c < N - 1; c++) {
-          if (rungs[r][c]) {
-            ctx.strokeStyle = '#606890';
-            ctx.beginPath();
-            ctx.moveTo(laneX(c), y);
-            ctx.lineTo(laneX(c + 1), y);
-            ctx.stroke();
-          }
-        }
-      }
-
-      // Top labels
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      for (let i = 0; i < N; i++) {
-        const x = laneX(i);
-        ctx.font = 'bold 11px sans-serif';
-        ctx.fillStyle = COLORS[i % COLORS.length];
-        const name = players[i].length > 3 ? players[i].slice(0, 3) : players[i];
-        ctx.fillText(name, x, LABEL_TOP - 2);
-      }
-
-      // Bottom position labels
-      const matchCount = Math.floor(N / 4);
-      ctx.font = 'bold 10px sans-serif';
-      for (let i = 0; i < N; i++) {
-        const x = laneX(i);
-        let label;
-        if (i < matchCount * 4) {
-          label = `${Math.floor(i / 4) + 1}코트`;
-        } else {
-          label = '대기';
-        }
-        ctx.fillStyle = '#666';
-        ctx.fillText(label, x, GRID_BOTTOM + LABEL_BOTTOM);
-      }
-
-      // Animated markers
-      for (let pi = 0; pi < N; pi++) {
-        const { x, y } = getMarker(pi, progress);
-        const color = COLORS[pi % COLORS.length];
-
-        ctx.beginPath();
-        ctx.arc(x, y, 9, 0, Math.PI * 2);
-        ctx.fillStyle = color;
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        ctx.font = 'bold 8px sans-serif';
-        ctx.fillStyle = '#fff';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const lbl = players[pi].length > 2 ? players[pi].slice(0, 2) : players[pi];
-        ctx.fillText(lbl, x, y);
-      }
-
-      if (progress < 1) {
-        _animFrame = requestAnimationFrame(draw);
+  function _makeDefaultLabels(N, matchCount) {
+    const labels = [];
+    for (let i = 0; i < N; i++) {
+      if (i < matchCount * 4) {
+        const c = Math.floor(i / 4) + 1;
+        const t = Math.floor((i % 4) / 2) === 0 ? 'A팀' : 'B팀';
+        labels.push(`${c}코트${t}`);
       } else {
-        _animFrame = null;
-        // Final frame: show markers at their final lane
-        for (let pi = 0; pi < N; pi++) {
-          const fl = finals[pi];
-          const x  = laneX(fl);
-          const y  = GRID_BOTTOM - 2;
-          const color = COLORS[pi % COLORS.length];
-
-          ctx.beginPath();
-          ctx.arc(x, y, 9, 0, Math.PI * 2);
-          ctx.fillStyle = color;
-          ctx.fill();
-          ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-          ctx.font = 'bold 8px sans-serif';
-          ctx.fillStyle = '#fff';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          const lbl = players[pi].length > 2 ? players[pi].slice(0, 2) : players[pi];
-          ctx.fillText(lbl, x, y);
-        }
-        setTimeout(() => onDone(posToPlayer), 200);
+        labels.push('대기');
       }
     }
-
-    _animFrame = requestAnimationFrame(draw);
+    return labels;
   }
 
   function _genLadder(N, rows) {
@@ -297,12 +219,8 @@
     for (let r = 0; r < rows; r++) {
       let c = 0;
       while (c < N - 1) {
-        if (Math.random() < 0.44) {
-          grid[r][c] = true;
-          c += 2; // skip one to avoid adjacency
-        } else {
-          c++;
-        }
+        if (Math.random() < 0.44) { grid[r][c] = true; c += 2; }
+        else c++;
       }
     }
     return grid;
@@ -311,225 +229,872 @@
   function _traceLadder(rungs, start, numRows) {
     let lane = start;
     for (let r = 0; r < numRows; r++) {
-      if (lane < rungs[r].length && rungs[r][lane])       lane++;
-      else if (lane > 0 && rungs[r][lane - 1])            lane--;
+      if (lane < rungs[r].length && rungs[r][lane])     lane++;
+      else if (lane > 0 && rungs[r][lane - 1])          lane--;
     }
     return lane;
   }
 
-  /* ============================================================
-     PLINKO GAME  (핀볼)
-     ============================================================ */
-  function _runPlinko(canvas, players, onDone) {
-    const ctx = canvas.getContext('2d');
-    const N   = players.length;
-    const W   = canvas.width;
-    const H   = canvas.height;
+  function _laneX(i) {
+    const { N, canvas } = _L;
+    return (i + 0.5) * canvas.width / N;
+  }
 
-    // Pre-determine final slot assignments via Fisher-Yates shuffle
-    const shuffled = [...players];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  function _initLadder(canvas, players, onDone) {
+    const N        = players.length;
+    const numRows  = Math.max(8, Math.min(14, N + 4));
+    const rungs    = _genLadder(N, numRows);
+    const finals   = players.map((_, i) => _traceLadder(rungs, i, numRows));
+    const mc       = Math.min(Math.floor(N / 4), 6);
+    const defLabels = _makeDefaultLabels(N, mc);
+
+    _L = {
+      canvas, players, N, numRows, rungs, finals, mc,
+      topAssign: [...players],
+      botOrder:  Array.from({ length: N }, (_, i) => i),
+      defLabels,
+      phase:        'setup',  // 'setup' | 'running' | 'reveal' | 'done'
+      coverAlpha:   1.0,
+      animProgress: 0,
+      animStartTs:  null,
+      ANIM_DURATION:   2400,
+      REVEAL_DURATION: 900,
+      revealStartTs:   null,
+      paths:    null,
+      pickerType:    null,
+      pickerSlotIdx: -1,
+      onDone
+    };
+
+    _updateSlotButtons();
+    _drawLadder();
+  }
+
+  /* ── slot buttons ── */
+  function _updateSlotButtons() {
+    if (!_L) return;
+    const { N, players, topAssign, botOrder, defLabels, phase } = _L;
+    const editable = (phase === 'setup');
+
+    const topSlots = document.getElementById('ladderTopSlots');
+    const botSlots = document.getElementById('ladderBottomSlots');
+    if (!topSlots || !botSlots) return;
+
+    topSlots.innerHTML = '';
+    for (let i = 0; i < N; i++) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ladder-slot-btn ladder-slot-top';
+      const colorIdx = Math.max(0, players.indexOf(topAssign[i]));
+      btn.style.color = COLORS[colorIdx % COLORS.length];
+      const nm = topAssign[i] || '?';
+      btn.textContent = nm.length > 3 ? nm.slice(0, 3) : nm;
+      btn.title = nm;
+      if (editable) {
+        (function (idx) { btn.onclick = () => _openTopPicker(idx); })(i);
+      } else {
+        btn.disabled = true;
+      }
+      topSlots.appendChild(btn);
     }
 
-    const PAD      = 16;
-    const slotW    = (W - PAD * 2) / N;
-    const PEG_ROWS = Math.min(7, Math.max(5, N - 1));
-    const TOP_Y    = PAD + 20;
-    const BOT_Y    = H - PAD - 24;
-    const usableH  = BOT_Y - TOP_Y;
+    botSlots.innerHTML = '';
+    for (let i = 0; i < N; i++) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ladder-slot-btn ladder-slot-bottom';
+      btn.textContent = defLabels[botOrder[i]];
+      if (editable) {
+        (function (idx) { btn.onclick = () => _openBottomPicker(idx); })(i);
+      } else {
+        btn.disabled = true;
+      }
+      botSlots.appendChild(btn);
+    }
+  }
 
-    // Peg positions (staggered triangular grid)
-    const pegs = [];
-    for (let r = 0; r < PEG_ROWS; r++) {
-      const count   = N + 1;
-      const offset  = (r % 2 === 0) ? 0 : slotW * 0.5;
-      const startX  = PAD + offset;
-      for (let c = 0; c < count - (r % 2); c++) {
-        pegs.push({
-          x: startX + c * slotW,
-          y: TOP_Y + (r + 1) * (usableH / (PEG_ROWS + 1))
-        });
+  /* ── pickers ── */
+  function _openTopPicker(slotIdx) {
+    if (!_L || _L.phase !== 'setup') return;
+    _L.pickerType    = 'top';
+    _L.pickerSlotIdx = slotIdx;
+
+    const popup = document.getElementById('ladderPickerPopup');
+    const bd    = document.getElementById('ladderPickerBackdrop');
+
+    popup.innerHTML = _L.players.map((p, i) => {
+      const isCur = (_L.topAssign[slotIdx] === p);
+      return `<button type="button" class="ladder-picker-item${isCur ? ' active' : ''}" onclick="_selectPickerItem(${i})">${_esc(p)}</button>`;
+    }).join('');
+
+    _positionPicker(slotIdx, 'top');
+    popup.classList.remove('hidden');
+    bd.classList.remove('hidden');
+  }
+
+  function _openBottomPicker(slotIdx) {
+    if (!_L || _L.phase !== 'setup') return;
+    _L.pickerType    = 'bottom';
+    _L.pickerSlotIdx = slotIdx;
+
+    const popup = document.getElementById('ladderPickerPopup');
+    const bd    = document.getElementById('ladderPickerBackdrop');
+    const { defLabels, botOrder } = _L;
+
+    popup.innerHTML = botOrder.map((roleIdx, i) => {
+      const isCur = (i === slotIdx);
+      return `<button type="button" class="ladder-picker-item${isCur ? ' active' : ''}" onclick="_selectPickerItem(${i})">${_esc(defLabels[roleIdx])}</button>`;
+    }).join('');
+
+    _positionPicker(slotIdx, 'bottom');
+    popup.classList.remove('hidden');
+    bd.classList.remove('hidden');
+  }
+
+  function _positionPicker(slotIdx, which) {
+    const popup   = document.getElementById('ladderPickerPopup');
+    const slotsEl = document.getElementById(which === 'top' ? 'ladderTopSlots' : 'ladderBottomSlots');
+    if (!popup || !slotsEl) return;
+
+    const btns = slotsEl.querySelectorAll('.ladder-slot-btn');
+    if (slotIdx >= btns.length) return;
+
+    const btnRect = btns[slotIdx].getBoundingClientRect();
+    // Picker max-height is 192px (set in CSS)
+    let top  = (which === 'top') ? (btnRect.bottom + 4) : (btnRect.top - 196);
+    if (top < 4) top = btnRect.bottom + 4;
+    let left = Math.max(4, Math.min(btnRect.left, window.innerWidth - 148));
+
+    popup.style.top  = top + 'px';
+    popup.style.left = left + 'px';
+  }
+
+  /* ── animation ── */
+  function _startLadderAnim() {
+    if (!_L) return;
+    const startBtn = document.getElementById('miniGameStartBtn');
+    if (startBtn) startBtn.style.display = 'none';
+    _L.phase = 'running';
+    _updateSlotButtons();
+    _L.animStartTs = null;
+    _L.animProgress = 0;
+
+    function tick(ts) {
+      if (!_L.animStartTs) _L.animStartTs = ts;
+      _L.animProgress = Math.min((ts - _L.animStartTs) / _L.ANIM_DURATION, 1);
+      _drawLadder();
+      if (_L.animProgress < 1) {
+        _animFrame = requestAnimationFrame(tick);
+      } else {
+        _animFrame = null;
+        _L.phase        = 'reveal';
+        _L.coverAlpha   = 1.0;
+        _L.revealStartTs = null;
+        _L.paths = _L.players.map((_, pi) => _computePath(pi));
+        _revealLadder();
+      }
+    }
+    _animFrame = requestAnimationFrame(tick);
+  }
+
+  function _revealLadder() {
+    function tick(ts) {
+      if (!_L.revealStartTs) _L.revealStartTs = ts;
+      _L.coverAlpha = Math.max(0, 1 - (ts - _L.revealStartTs) / _L.REVEAL_DURATION);
+      _drawLadder();
+      if (_L.coverAlpha > 0) {
+        _animFrame = requestAnimationFrame(tick);
+      } else {
+        _animFrame = null;
+        _L.phase      = 'done';
+        _L.coverAlpha = 0;
+        _drawLadder();
+        _deliverResult();
+      }
+    }
+    _animFrame = requestAnimationFrame(tick);
+  }
+
+  function _deliverResult() {
+    if (!_L) return;
+    const { topAssign, finals, botOrder, N, onDone } = _L;
+    const orderedPlayers = new Array(N).fill('');
+    for (let lane = 0; lane < N; lane++) {
+      const finalPos = finals[lane];
+      const roleIdx  = botOrder[finalPos];
+      orderedPlayers[roleIdx] = topAssign[lane];
+    }
+    setTimeout(() => { if (_L) onDone(orderedPlayers); }, 400);
+  }
+
+  function _computePath(playerIdx) {
+    const { canvas, N, numRows, rungs } = _L;
+    const H    = canvas.height;
+    const rowH = H / numRows;
+    let lane   = playerIdx;
+    const pts  = [{ x: _laneX(lane), y: 0 }];
+
+    for (let r = 0; r < numRows; r++) {
+      const midY = (r + 0.5) * rowH;
+      pts.push({ x: _laneX(lane), y: midY });
+
+      if (lane < N - 1 && rungs[r][lane]) {
+        lane++;
+        pts.push({ x: _laneX(lane), y: midY });
+      } else if (lane > 0 && rungs[r][lane - 1]) {
+        lane--;
+        pts.push({ x: _laneX(lane), y: midY });
+      }
+    }
+    pts.push({ x: _laneX(lane), y: H });
+    return pts;
+  }
+
+  function _getMarkerPos(playerIdx, progress) {
+    const { N, numRows, rungs, canvas } = _L;
+    const H    = canvas.height;
+    const rowH = H / numRows;
+    let lane   = playerIdx;
+
+    const curDist    = progress * numRows;
+    const completedR = Math.floor(curDist);
+    const rowFrac    = curDist - completedR;
+
+    for (let r = 0; r < Math.min(completedR, numRows); r++) {
+      if (lane < N - 1 && rungs[r][lane])     lane++;
+      else if (lane > 0 && rungs[r][lane - 1]) lane--;
+    }
+
+    let x = _laneX(lane);
+    if (completedR < numRows && rungs[completedR]) {
+      if (lane < N - 1 && rungs[completedR][lane] && rowFrac >= 0.4) {
+        const t = (rowFrac - 0.4) / 0.6;
+        x = _laneX(lane) + (_laneX(lane + 1) - _laneX(lane)) * t;
+      } else if (lane > 0 && rungs[completedR][lane - 1] && rowFrac >= 0.4) {
+        const t = (rowFrac - 0.4) / 0.6;
+        x = _laneX(lane) + (_laneX(lane - 1) - _laneX(lane)) * t;
+      }
+    }
+    const y = Math.min(progress * (H + rowH), H);
+    return { x, y };
+  }
+
+  /* ── canvas draw ── */
+  function _drawLadder() {
+    if (!_L) return;
+    const { canvas, N, numRows, rungs, finals, topAssign, phase, animProgress, coverAlpha, paths } = _L;
+    const ctx  = canvas.getContext('2d');
+    const W    = canvas.width, H = canvas.height;
+    const rowH = H / numRows;
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#131620';
+    ctx.fillRect(0, 0, W, H);
+
+    // 1. Rungs (drawn under the cover)
+    ctx.lineWidth = 2;
+    for (let r = 0; r < numRows; r++) {
+      const y = (r + 0.5) * rowH;
+      for (let c = 0; c < N - 1; c++) {
+        if (rungs[r][c]) {
+          ctx.strokeStyle = '#7080b0';
+          ctx.beginPath();
+          ctx.moveTo(_laneX(c), y);
+          ctx.lineTo(_laneX(c + 1), y);
+          ctx.stroke();
+        }
       }
     }
 
-    // Ball state: all N balls launch sequentially, guided to their target slot
-    const balls    = [];
-    let launched   = 0;
-    let launchTimer = 0;
-    const LAUNCH_DELAY = Math.min(600, 3200 / N); // ms between balls
-
-    const GRAVITY = 380;
-    const BOUNCE  = 0.28;
-    const PEG_R   = 5;
-    const BALL_R  = 7;
-
-    function launchNext() {
-      if (launched >= N) return;
-      const slot    = launched;           // target slot index (in shuffled order)
-      const targetX = PAD + (slot + 0.5) * slotW;
-      const startX  = targetX + (Math.random() - 0.5) * slotW * 0.6;
-      balls.push({
-        x: startX, y: TOP_Y - 10,
-        vx: (Math.random() - 0.5) * 40,
-        vy: 0,
-        targetX,
-        idx: launched,
-        landed: false
-      });
-      launched++;
+    // 2. Path highlights (reveal / done)
+    if ((phase === 'reveal' || phase === 'done') && paths) {
+      const alpha = (1 - coverAlpha) * 0.88;
+      if (alpha > 0) {
+        ctx.lineCap    = 'round';
+        ctx.lineJoin   = 'round';
+        ctx.lineWidth  = 3.5;
+        for (let pi = 0; pi < N; pi++) {
+          const [r, g, b] = _hexToRgb(COLORS[pi % COLORS.length]);
+          ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
+          ctx.beginPath();
+          paths[pi].forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
+          ctx.stroke();
+        }
+      }
     }
 
-    launchNext();
+    // 3. Animated markers (running — drawn before cover so cover hides them in middle)
+    if (phase === 'running') {
+      for (let pi = 0; pi < N; pi++) {
+        const { x, y } = _getMarkerPos(pi, animProgress);
+        _drawMarker(ctx, x, y, COLORS[pi % COLORS.length], topAssign[pi], 1.0);
+      }
+    }
+
+    // 4. Cover gradient (hides middle section)
+    if (coverAlpha > 0.001) {
+      const c    = coverAlpha;
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0,    `rgba(19,22,32,0)`);
+      grad.addColorStop(0.13, `rgba(19,22,32,${c})`);
+      grad.addColorStop(0.87, `rgba(19,22,32,${c})`);
+      grad.addColorStop(1,    `rgba(19,22,32,0)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // 5. Lane lines (always on top)
+    ctx.lineWidth = 2;
+    for (let i = 0; i < N; i++) {
+      ctx.strokeStyle = '#4a5078';
+      ctx.beginPath();
+      ctx.moveTo(_laneX(i), 0);
+      ctx.lineTo(_laneX(i), H);
+      ctx.stroke();
+    }
+
+    // 6. Final markers at bottom (visible as cover fades)
+    if (phase === 'reveal' || phase === 'done') {
+      const alpha = 1 - coverAlpha;
+      if (alpha > 0.05) {
+        for (let pi = 0; pi < N; pi++) {
+          const fx = _laneX(finals[pi]);
+          const fy = H - 11;
+          _drawMarker(ctx, fx, fy, COLORS[pi % COLORS.length], topAssign[pi], alpha);
+        }
+      }
+    }
+  }
+
+  function _drawMarker(ctx, x, y, color, name, alpha) {
+    const [r, g, b] = _hexToRgb(color);
+    ctx.beginPath();
+    ctx.arc(x, y, 9, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+    ctx.fill();
+    ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.45})`;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.font         = 'bold 8px sans-serif';
+    ctx.fillStyle    = `rgba(255,255,255,${alpha})`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    const lbl = name.length > 2 ? name.slice(0, 2) : name;
+    ctx.fillText(lbl, x, y);
+  }
+
+  /* ============================================================
+     PLINKO RACING GAME
+     ============================================================ */
+
+  /* obstacle definition helpers */
+  function _B(fx, y, r)           { return { type: 'bumper',   fx, y, r: r || 10 }; }
+  function _Lb(fx, y, fw)         { return { type: 'launcher', fx, y, fw: fw || 0.35 }; }
+  function _Dt(fx, y, fw)         { return { type: 'delay',    fx, y, fw: fw || 0.30 }; }
+  function _Rp(fx1, y1, fx2, y2)  { return { type: 'ramp',    fx1, y1, fx2, y2 }; }
+  function _Bst(fx, y, fw, h)     { return { type: 'boost',   fx, y, fw: fw || 0.50, h: h || 35 }; }
+  function _Slw(fx, y, fw, h)     { return { type: 'slow',    fx, y, fw: fw || 0.40, h: h || 55 }; }
+
+  /* ── 3 course layouts ── */
+  const _COURSES = [
+    /* 코스 1: 클래식 */
+    { name: '클래식', obs: [
+      _B(0.50,  180),
+      _B(0.17,280), _B(0.33,280), _B(0.50,280), _B(0.67,280), _B(0.83,280),
+      _B(0.25,370), _B(0.42,370), _B(0.58,370), _B(0.75,370),
+      _Lb(0.50,450,0.55),
+      _B(0.20,540), _B(0.40,540), _B(0.60,540), _B(0.80,540),
+      _B(0.30,630), _B(0.50,630), _B(0.70,630),
+      _Dt(0.50,710,0.38),
+      _B(0.17,820), _B(0.33,820), _B(0.50,820), _B(0.67,820), _B(0.83,820),
+      _B(0.25,910), _B(0.50,910), _B(0.75,910),
+      _Rp(0.06,1010, 0.38,945), _Rp(0.94,1010, 0.62,945),
+      _B(0.20,1060), _B(0.40,1060), _B(0.60,1060), _B(0.80,1060),
+      _B(0.30,1150), _B(0.50,1150), _B(0.70,1150),
+      _Lb(0.27,1240,0.27), _Lb(0.73,1240,0.27),
+      _B(0.17,1340), _B(0.33,1340), _B(0.50,1340), _B(0.67,1340), _B(0.83,1340),
+      _B(0.25,1430), _B(0.50,1430), _B(0.75,1430),
+      _Bst(0.50,1510,0.80,35),
+      _B(0.20,1600), _B(0.40,1600), _B(0.60,1600), _B(0.80,1600),
+      _B(0.30,1690), _B(0.50,1690), _B(0.70,1690),
+      _B(0.17,1780), _B(0.50,1780), _B(0.83,1780),
+      _B(0.25,1900), _B(0.50,1900), _B(0.75,1900),
+      _B(0.17,1990), _B(0.33,1990), _B(0.50,1990), _B(0.67,1990), _B(0.83,1990),
+      _B(0.30,2080), _B(0.70,2080),
+      _B(0.50,2170),
+    ]},
+
+    /* 코스 2: 카오스 */
+    { name: '카오스', obs: [
+      _B(0.25,200), _B(0.75,200),
+      _B(0.17,280), _B(0.33,280), _B(0.50,280), _B(0.67,280), _B(0.83,280),
+      _Lb(0.50,370,0.65),
+      _B(0.12,460), _B(0.28,460), _B(0.50,460), _B(0.72,460), _B(0.88,460),
+      _B(0.20,550), _B(0.40,550), _B(0.60,550), _B(0.80,550),
+      _Dt(0.28,640,0.28), _Dt(0.72,640,0.28),
+      _B(0.17,730), _B(0.33,730), _B(0.50,730), _B(0.67,730), _B(0.83,730),
+      _B(0.25,820), _B(0.50,820), _B(0.75,820),
+      _Lb(0.17,910,0.25), _Lb(0.83,910,0.25),
+      _B(0.12,1010), _B(0.30,1010), _B(0.50,1010), _B(0.70,1010), _B(0.88,1010),
+      _B(0.20,1100), _B(0.40,1100), _B(0.60,1100), _B(0.80,1100),
+      _Lb(0.50,1190,0.40),
+      _Dt(0.50,1280,0.35),
+      _B(0.17,1380), _B(0.33,1380), _B(0.50,1380), _B(0.67,1380), _B(0.83,1380),
+      _B(0.25,1470), _B(0.50,1470), _B(0.75,1470),
+      _Lb(0.25,1560,0.25), _Lb(0.75,1560,0.25),
+      _Bst(0.50,1640,0.70,35),
+      _B(0.17,1760), _B(0.33,1760), _B(0.50,1760), _B(0.67,1760), _B(0.83,1760),
+      _B(0.25,1850), _B(0.50,1850), _B(0.75,1850),
+      _B(0.17,1940), _B(0.50,1940), _B(0.83,1940),
+      _B(0.33,2030), _B(0.67,2030),
+      _B(0.20,2120), _B(0.50,2120), _B(0.80,2120),
+    ]},
+
+    /* 코스 3: 미로 */
+    { name: '미로', obs: [
+      _Rp(0.04,260, 0.40,180), _Rp(0.96,260, 0.60,180),
+      _B(0.25,300), _B(0.50,300), _B(0.75,300),
+      _B(0.17,390), _B(0.37,390), _B(0.63,390), _B(0.83,390),
+      _Slw(0.15,470,0.28,60), _Slw(0.57,470,0.28,60),
+      _B(0.50,515),
+      _B(0.25,620), _B(0.50,620), _B(0.75,620),
+      _Rp(0.08,720, 0.42,660), _Rp(0.92,720, 0.58,660),
+      _B(0.15,790), _B(0.30,790), _B(0.50,790), _B(0.70,790), _B(0.85,790),
+      _B(0.22,880), _B(0.42,880), _B(0.62,880), _B(0.82,880),
+      _B(0.15,960), _B(0.38,960), _B(0.62,960), _B(0.85,960),
+      _Lb(0.50,1050,0.38),
+      _Dt(0.28,1140,0.28), _Dt(0.72,1140,0.28),
+      _B(0.17,1240), _B(0.33,1240), _B(0.50,1240), _B(0.67,1240), _B(0.83,1240),
+      _B(0.25,1330), _B(0.50,1330), _B(0.75,1330),
+      _Rp(0.04,1450, 0.38,1370), _Rp(0.96,1450, 0.62,1370),
+      _Slw(0.50,1470,0.40,50),
+      _B(0.17,1580), _B(0.33,1580), _B(0.50,1580), _B(0.67,1580), _B(0.83,1580),
+      _B(0.25,1670), _B(0.50,1670), _B(0.75,1670),
+      _Bst(0.50,1750,0.80,40),
+      _B(0.20,1870), _B(0.40,1870), _B(0.60,1870), _B(0.80,1870),
+      _B(0.30,1960), _B(0.50,1960), _B(0.70,1960),
+      _B(0.17,2050), _B(0.50,2050), _B(0.83,2050),
+      _B(0.33,2140), _B(0.67,2140),
+      _B(0.50,2230),
+    ]},
+  ];
+
+  const _COURSE_H = 2400;
+  const _FINISH_Y = 2340;
+  const _P_BALL_R = 7;
+  const _GRAVITY  = 360;
+
+  /* convert fractional-x course def → pixel coords */
+  function _resolveCourse(course, W) {
+    return course.obs.map(o => {
+      switch (o.type) {
+        case 'bumper':   return { type: 'bumper',   x: o.fx*W,  y: o.y, r: o.r };
+        case 'launcher': return { type: 'launcher', x: o.fx*W,  y: o.y, w: o.fw*W };
+        case 'delay':    return { type: 'delay',    x: o.fx*W,  y: o.y, w: o.fw*W };
+        case 'boost':    return { type: 'boost',    x: o.fx*W,  y: o.y, w: o.fw*W, h: o.h };
+        case 'slow':     return { type: 'slow',     x: o.fx*W,  y: o.y, w: o.fw*W, h: o.h };
+        case 'ramp':     return { type: 'ramp',    x1: o.fx1*W, y1: o.y1, x2: o.fx2*W, y2: o.y2 };
+        default:         return o;
+      }
+    });
+  }
+
+  /* ── init (setup phase) ── */
+  function _initPlinko(canvas, players, onDone) {
+    const N = players.length;
+    const W = canvas.width;
+    const H = canvas.height;
+    _P = {
+      canvas, players, onDone,
+      phase: 'setup',
+      courseIdx: 0,
+      W, H,
+      cameraY: 0,
+      finishOrder: [],
+      resolved: _resolveCourse(_COURSES[0], W),
+      balls: Array.from({ length: N }, (_, i) => ({
+        x: W / 2 + (i - (N - 1) / 2) * 2.5,
+        y: 50, vx: 0, vy: 0,
+        r: _P_BALL_R, playerIdx: i, finished: false, frozenUntil: 0,
+      })),
+    };
+    _drawPlinkoSetup();
+  }
+
+  function _drawPlinkoSetup() {
+    if (!_P) return;
+    const { canvas, balls, H, resolved, courseIdx } = _P;
+    const ctx = canvas.getContext('2d');
+    const W   = canvas.width;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#0f1018';
+    ctx.fillRect(0, 0, W, H);
+
+    for (const obs of resolved) {
+      const minY = obs.type === 'ramp' ? Math.min(obs.y1, obs.y2) : obs.y;
+      if (minY > H + 30) continue;
+      _drawPlinkoObs(ctx, obs, 0);
+    }
+    if (_FINISH_Y < H + 30) _drawPlinkoFinish(ctx, W, H, _FINISH_Y);
+
+    for (let i = 0; i < balls.length; i++) {
+      _drawPlinkoBall(ctx, balls[i], balls[i].y, i, _P.players, _P.finishOrder);
+    }
+
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, H - 30, W, 30);
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#8090b8';
+    ctx.fillText(`코스 ${courseIdx + 1}: ${_COURSES[courseIdx].name}  ·  시작 버튼을 눌러 레이스 시작`, W / 2, H - 15);
+  }
+
+  /* ── start race ── */
+  function _startPlinkoRace() {
+    if (!_P) return;
+    const sb = document.getElementById('miniGameStartBtn');
+    const cb = document.getElementById('miniGameCourseBtn');
+    if (sb) sb.style.display = 'none';
+    if (cb) cb.style.display = 'none';
+
+    const N = _P.players.length;
+    const W = _P.W;
+    _P.balls = Array.from({ length: N }, (_, i) => ({
+      x: W / 2 + (i - (N - 1) / 2) * 2.5,
+      y: 50,
+      vx: (Math.random() - 0.5) * 40,
+      vy: (Math.random() * 25),
+      r: _P_BALL_R, playerIdx: i, finished: false, frozenUntil: 0,
+    }));
+    _P.cameraY      = 0;
+    _P.finishOrder  = [];
+    _P.phase        = 'running';
 
     let lastTs = null;
-    let allDone = false;
-
-    function update(dt) {
-      launchTimer += dt * 1000;
-      if (launchTimer >= LAUNCH_DELAY && launched < N) {
-        launchTimer -= LAUNCH_DELAY;
-        launchNext();
-      }
-
-      for (const b of balls) {
-        if (b.landed) continue;
-
-        // Gravity
-        b.vy += GRAVITY * dt;
-
-        // Weak horizontal pull toward target slot (subtle guidance)
-        const dx = b.targetX - b.x;
-        b.vx += dx * 0.8 * dt;
-        b.vx += (Math.random() - 0.5) * 60 * dt; // slight noise
-
-        b.x += b.vx * dt;
-        b.y += b.vy * dt;
-
-        // Peg collisions
-        for (const p of pegs) {
-          const ddx = b.x - p.x;
-          const ddy = b.y - p.y;
-          const dist = Math.sqrt(ddx * ddx + ddy * ddy);
-          const minD = BALL_R + PEG_R;
-          if (dist < minD && dist > 0.01) {
-            const nx = ddx / dist;
-            const ny = ddy / dist;
-            const vDotN = b.vx * nx + b.vy * ny;
-            if (vDotN < 0) {
-              b.vx -= (1 + BOUNCE) * vDotN * nx;
-              b.vy -= (1 + BOUNCE) * vDotN * ny;
-            }
-            b.x = p.x + nx * (minD + 0.5);
-            b.y = p.y + ny * (minD + 0.5);
-          }
-        }
-
-        // Side walls
-        if (b.x < PAD + BALL_R)       { b.x  = PAD + BALL_R;        b.vx = Math.abs(b.vx); }
-        if (b.x > W - PAD - BALL_R)   { b.x  = W - PAD - BALL_R;    b.vx = -Math.abs(b.vx); }
-
-        // Bottom
-        if (b.y >= BOT_Y - BALL_R) {
-          b.y  = BOT_Y - BALL_R;
-          b.vy *= -0.25;
-          b.vx  = 0;
-          if (Math.abs(b.vy) < 40) {
-            b.vy = 0;
-            b.landed = true;
-            b.x = b.targetX; // snap to slot center
-          }
-        }
-      }
-
-      if (balls.length >= N && balls.every(b => b.landed)) allDone = true;
-    }
-
-    function draw() {
-      ctx.clearRect(0, 0, W, H);
-      ctx.fillStyle = '#131620';
-      ctx.fillRect(0, 0, W, H);
-
-      const matchCount = Math.floor(N / 4);
-
-      // Slot floors
-      ctx.strokeStyle = '#2c3350';
-      ctx.lineWidth = 1;
-      for (let i = 0; i <= N; i++) {
-        const x = PAD + i * slotW;
-        ctx.beginPath();
-        ctx.moveTo(x, BOT_Y);
-        ctx.lineTo(x, H - PAD);
-        ctx.stroke();
-      }
-
-      // Slot labels
-      ctx.font = 'bold 9px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      for (let i = 0; i < N; i++) {
-        const x  = PAD + (i + 0.5) * slotW;
-        const lbl = i < matchCount * 4 ? `${Math.floor(i / 4) + 1}코트` : '대기';
-        ctx.fillStyle = '#555';
-        ctx.fillText(lbl, x, H - PAD - 10);
-
-        // Player name if ball landed here
-        if (balls[i] && balls[i].landed) {
-          const name = shuffled[i].length > 3 ? shuffled[i].slice(0, 3) : shuffled[i];
-          ctx.fillStyle = COLORS[i % COLORS.length];
-          ctx.font = 'bold 10px sans-serif';
-          ctx.fillText(name, x, BOT_Y - 12);
-          ctx.font = 'bold 9px sans-serif';
-        }
-      }
-
-      // Pegs
-      for (const p of pegs) {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, PEG_R, 0, Math.PI * 2);
-        ctx.fillStyle = '#4a5070';
-        ctx.fill();
-      }
-
-      // Balls
-      for (const b of balls) {
-        const color = COLORS[b.idx % COLORS.length];
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, BALL_R, 0, Math.PI * 2);
-        ctx.fillStyle = color;
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-
-      // "upcoming players" bar at top
-      if (launched < N) {
-        ctx.font = '10px sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillStyle = '#888';
-        const upcoming = shuffled.slice(launched).join('  ');
-        ctx.fillText(`대기: ${upcoming}`, PAD, PAD + 10);
-      }
-    }
-
-    function loop(ts) {
+    function tick(ts) {
       if (!lastTs) lastTs = ts;
       const dt = Math.min((ts - lastTs) / 1000, 0.05);
       lastTs = ts;
-
-      if (!allDone) update(dt);
-      draw();
-
-      if (!allDone) {
-        _animFrame = requestAnimationFrame(loop);
+      _updatePlinko(dt);
+      _drawPlinkoRace();
+      if (_P && _P.phase === 'running') {
+        _animFrame = requestAnimationFrame(tick);
       } else {
         _animFrame = null;
-        setTimeout(() => onDone(shuffled), 300);
+      }
+    }
+    _animFrame = requestAnimationFrame(tick);
+  }
+
+  /* ── physics ── */
+  function _updatePlinko(dt) {
+    if (!_P || _P.phase !== 'running') return;
+    const { balls, resolved, W } = _P;
+    const now = Date.now();
+
+    for (const ball of balls) {
+      if (ball.finished) continue;
+
+      if (ball.frozenUntil > 0) {
+        if (now < ball.frozenUntil) { ball.vx = 0; ball.vy = 0; continue; }
+        ball.frozenUntil = 0;
+        ball.vy = 75;
+      }
+
+      ball.vy += _GRAVITY * dt;
+
+      for (const obs of resolved) {
+        const hw = obs.w ? obs.w / 2 : 0;
+        if (obs.type === 'boost' && ball.x >= obs.x - hw && ball.x <= obs.x + hw &&
+            ball.y >= obs.y && ball.y <= obs.y + obs.h) {
+          ball.vy = Math.min(ball.vy + 240 * dt, 900);
+        }
+        if (obs.type === 'slow' && ball.x >= obs.x - hw && ball.x <= obs.x + hw &&
+            ball.y >= obs.y && ball.y <= obs.y + obs.h) {
+          ball.vx *= Math.pow(0.04, dt);
+          ball.vy *= Math.pow(0.15, dt);
+          if (ball.vy < 45) ball.vy = 45;
+        }
+      }
+
+      ball.x += ball.vx * dt;
+      ball.y += ball.vy * dt;
+
+      if (ball.x < ball.r)       { ball.x = ball.r;       ball.vx =  Math.abs(ball.vx) * 0.5; }
+      if (ball.x > W - ball.r)   { ball.x = W - ball.r;   ball.vx = -Math.abs(ball.vx) * 0.5; }
+
+      for (const obs of resolved) {
+        if      (obs.type === 'bumper')   _collideBumper(ball, obs);
+        else if (obs.type === 'launcher') _collideLauncher(ball, obs);
+        else if (obs.type === 'delay')    _collideDelay(ball, obs);
+        else if (obs.type === 'ramp')     _collideRamp(ball, obs);
+      }
+
+      if (ball.y >= _FINISH_Y) {
+        ball.x = Math.max(ball.r, Math.min(W - ball.r, ball.x));
+        ball.y = _FINISH_Y; ball.vx = 0; ball.vy = 0;
+        ball.finished = true;
+        _P.finishOrder.push(ball.playerIdx);
       }
     }
 
-    _animFrame = requestAnimationFrame(loop);
+    _separateBalls(balls);
+
+    /* camera: smooth follow of leading (lowest y) ball */
+    let leadY = 0;
+    for (const b of balls) { if (b.y > leadY) leadY = b.y; }
+    const targetCam = Math.max(0, Math.min(leadY - _P.H * 0.32, _COURSE_H - _P.H));
+    _P.cameraY += (targetCam - _P.cameraY) * Math.min(1, 4 * dt);
+
+    if (balls.every(b => b.finished)) {
+      _P.phase = 'done';
+      setTimeout(() => {
+        if (_P) _P.onDone(_P.finishOrder.map(idx => _P.players[idx]));
+      }, 900);
+    }
   }
+
+  function _collideBumper(ball, obs) {
+    const dx = ball.x - obs.x, dy = ball.y - obs.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const minD = ball.r + obs.r;
+    if (dist < minD && dist > 0.01) {
+      const nx = dx/dist, ny = dy/dist;
+      const vn = ball.vx*nx + ball.vy*ny;
+      if (vn < 0) { ball.vx -= 1.75*vn*nx; ball.vy -= 1.75*vn*ny; }
+      ball.x = obs.x + nx*(minD + 0.5);
+      ball.y = obs.y + ny*(minD + 0.5);
+    }
+  }
+
+  function _collideLauncher(ball, obs) {
+    const hw = obs.w / 2;
+    if (ball.x < obs.x - hw || ball.x > obs.x + hw) return;
+    if (ball.y + ball.r >= obs.y - 5 && ball.y + ball.r < obs.y + 10 && ball.vy > 0) {
+      ball.y = obs.y - 5 - ball.r;
+      ball.vy = -710; ball.vx *= 0.3;
+    }
+  }
+
+  function _collideDelay(ball, obs) {
+    if (ball.frozenUntil > 0) return;
+    const hw = obs.w / 2;
+    if (ball.x < obs.x - hw || ball.x > obs.x + hw) return;
+    if (ball.y + ball.r >= obs.y - 5 && ball.y + ball.r < obs.y + 10 && ball.vy > 0) {
+      ball.y = obs.y - 5 - ball.r;
+      ball.vx = 0; ball.vy = 0;
+      ball.frozenUntil = Date.now() + 1500;
+    }
+  }
+
+  function _collideRamp(ball, obs) {
+    const abx = obs.x2-obs.x1, aby = obs.y2-obs.y1;
+    const len2 = abx*abx + aby*aby;
+    if (len2 < 0.001) return;
+    const t  = Math.max(0, Math.min(1, ((ball.x-obs.x1)*abx + (ball.y-obs.y1)*aby) / len2));
+    const cx = obs.x1 + t*abx, cy = obs.y1 + t*aby;
+    const dx = ball.x - cx, dy = ball.y - cy;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist < ball.r + 3 && dist > 0.01) {
+      const nx = dx/dist, ny = dy/dist;
+      const vn = ball.vx*nx + ball.vy*ny;
+      if (vn < 0) { ball.vx -= 1.60*vn*nx; ball.vy -= 1.60*vn*ny; }
+      ball.x = cx + nx*(ball.r + 3.5);
+      ball.y = cy + ny*(ball.r + 3.5);
+    }
+  }
+
+  function _separateBalls(balls) {
+    for (let i = 0; i < balls.length; i++) {
+      if (balls[i].finished) continue;
+      for (let j = i+1; j < balls.length; j++) {
+        if (balls[j].finished) continue;
+        const dx = balls[j].x-balls[i].x, dy = balls[j].y-balls[i].y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const minD = balls[i].r + balls[j].r;
+        if (dist < minD && dist > 0.01) {
+          const nx = dx/dist, ny = dy/dist;
+          const ov = (minD - dist) * 0.55;
+          balls[i].x -= ov*nx; balls[i].y -= ov*ny;
+          balls[j].x += ov*nx; balls[j].y += ov*ny;
+          const rv = (balls[j].vx-balls[i].vx)*nx + (balls[j].vy-balls[i].vy)*ny;
+          if (rv < 0) {
+            balls[i].vx += rv*0.30*nx; balls[i].vy += rv*0.30*ny;
+            balls[j].vx -= rv*0.30*nx; balls[j].vy -= rv*0.30*ny;
+          }
+        }
+      }
+    }
+  }
+
+  /* ── drawing ── */
+  function _drawPlinkoRace() {
+    if (!_P) return;
+    const { canvas, balls, cameraY, resolved, H, players, finishOrder } = _P;
+    const ctx = canvas.getContext('2d');
+    const W   = canvas.width;
+    const toY = vy => vy - cameraY;
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#0f1018';
+    ctx.fillRect(0, 0, W, H);
+
+    /* subtle grid */
+    ctx.strokeStyle = '#15182a'; ctx.lineWidth = 1;
+    const g0 = Math.ceil(cameraY / 150) * 150;
+    for (let gy = g0; gy < cameraY + H; gy += 150) {
+      ctx.beginPath(); ctx.moveTo(0, toY(gy)); ctx.lineTo(W, toY(gy)); ctx.stroke();
+    }
+
+    const vt = cameraY - 30, vb = cameraY + H + 30;
+    for (const obs of resolved) {
+      const minY = obs.type==='ramp' ? Math.min(obs.y1,obs.y2) : obs.y;
+      const maxY = obs.type==='ramp' ? Math.max(obs.y1,obs.y2)
+                 : (obs.type==='slow'||obs.type==='boost') ? obs.y + obs.h : obs.y;
+      if (maxY < vt || minY > vb) continue;
+      _drawPlinkoObs(ctx, obs, cameraY);
+    }
+
+    const fy = toY(_FINISH_Y);
+    if (fy > -20 && fy < H + 20) _drawPlinkoFinish(ctx, W, H, fy);
+
+    for (let i = 0; i < balls.length; i++) {
+      const b  = balls[i];
+      const cy = toY(b.y);
+      if (cy < -25 || cy > H + 25) continue;
+      _drawPlinkoBall(ctx, b, cy, i, players, finishOrder);
+    }
+
+    _drawPlinkoBoard(ctx, W, H, balls, players, finishOrder);
+  }
+
+  function _drawPlinkoObs(ctx, obs, camY) {
+    const toY = vy => vy - camY;
+    if (obs.type === 'bumper') {
+      const cy = toY(obs.y);
+      ctx.beginPath(); ctx.arc(obs.x, cy, obs.r, 0, Math.PI*2);
+      ctx.fillStyle = '#30375e'; ctx.fill();
+      ctx.strokeStyle = '#5060a8'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.beginPath(); ctx.arc(obs.x - obs.r*0.28, cy - obs.r*0.28, obs.r*0.3, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(255,255,255,0.10)'; ctx.fill();
+
+    } else if (obs.type === 'launcher') {
+      const cy = toY(obs.y), hw = obs.w/2;
+      const g  = ctx.createLinearGradient(obs.x-hw, cy-5, obs.x+hw, cy+5);
+      g.addColorStop(0,'#c03a00'); g.addColorStop(1,'#ff6a00');
+      ctx.fillStyle = g;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(obs.x-hw, cy-5, obs.w, 10, 4); ctx.fill(); }
+      else { ctx.fillRect(obs.x-hw, cy-5, obs.w, 10); }
+      ctx.strokeStyle = '#ff9830'; ctx.lineWidth = 1;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(obs.x-hw, cy-5, obs.w, 10, 4); ctx.stroke(); }
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 8px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('▲▲', obs.x, cy);
+
+    } else if (obs.type === 'delay') {
+      const cy = toY(obs.y), hw = obs.w/2;
+      ctx.fillStyle = '#3c0e70';
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(obs.x-hw, cy-5, obs.w, 10, 4); ctx.fill(); }
+      else { ctx.fillRect(obs.x-hw, cy-5, obs.w, 10); }
+      ctx.strokeStyle = '#8040d0'; ctx.lineWidth = 1;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(obs.x-hw, cy-5, obs.w, 10, 4); ctx.stroke(); }
+      ctx.fillStyle = '#c8a0ff'; ctx.font = 'bold 8px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('STOP', obs.x, cy);
+
+    } else if (obs.type === 'slow') {
+      const ty = toY(obs.y), hw = obs.w/2;
+      ctx.fillStyle   = 'rgba(70,20,140,0.22)'; ctx.fillRect(obs.x-hw, ty, obs.w, obs.h);
+      ctx.strokeStyle = 'rgba(120,50,210,0.40)'; ctx.lineWidth = 1;
+      ctx.strokeRect(obs.x-hw, ty, obs.w, obs.h);
+      ctx.fillStyle = 'rgba(190,150,255,0.55)'; ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('⏳', obs.x, ty + obs.h/2);
+
+    } else if (obs.type === 'boost') {
+      const ty = toY(obs.y), hw = obs.w/2;
+      ctx.fillStyle   = 'rgba(20,160,60,0.18)'; ctx.fillRect(obs.x-hw, ty, obs.w, obs.h);
+      ctx.strokeStyle = 'rgba(50,210,90,0.38)'; ctx.lineWidth = 1;
+      ctx.strokeRect(obs.x-hw, ty, obs.w, obs.h);
+      ctx.fillStyle = 'rgba(100,240,130,0.60)'; ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('⚡', obs.x, ty + obs.h/2);
+
+    } else if (obs.type === 'ramp') {
+      ctx.strokeStyle = '#485888'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(obs.x1, toY(obs.y1)); ctx.lineTo(obs.x2, toY(obs.y2)); ctx.stroke();
+      ctx.lineCap = 'butt';
+    }
+  }
+
+  function _drawPlinkoFinish(ctx, W, H, canvasY) {
+    ctx.strokeStyle = 'rgba(255,215,0,0.75)'; ctx.lineWidth = 3;
+    ctx.setLineDash([8,5]);
+    ctx.beginPath(); ctx.moveTo(0, canvasY); ctx.lineTo(W, canvasY); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#ffd700'; ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText('FINISH', W/2, canvasY - 3);
+  }
+
+  function _drawPlinkoBall(ctx, ball, canvasY, idx, players, finishOrder) {
+    const color = COLORS[ball.playerIdx % COLORS.length];
+    const name  = (players[ball.playerIdx] || '?').slice(0, 2);
+    const now   = Date.now();
+
+    if (ball.frozenUntil > 0 && now < ball.frozenUntil) {
+      const rem = ((ball.frozenUntil - now) / 1000).toFixed(1);
+      ctx.fillStyle = 'rgba(200,160,255,0.85)'; ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillText(`⏸${rem}s`, ball.x, canvasY - ball.r - 2);
+    }
+
+    ctx.beginPath(); ctx.arc(ball.x, canvasY, ball.r, 0, Math.PI*2);
+    ctx.fillStyle = color; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.font = 'bold 7px sans-serif'; ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(name, ball.x, canvasY);
+
+    if (ball.finished) {
+      const pos   = finishOrder.indexOf(ball.playerIdx);
+      const label = String(pos + 1);
+      const badgeColor = pos===0?'#ffd700':pos===1?'#c0c0c0':pos===2?'#cd7f32':'#3a4570';
+      ctx.beginPath(); ctx.arc(ball.x + ball.r + 7, canvasY, 7, 0, Math.PI*2);
+      ctx.fillStyle = badgeColor; ctx.fill();
+      ctx.font = 'bold 7px sans-serif'; ctx.fillStyle = pos<3?'#000':'#fff';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, ball.x + ball.r + 7, canvasY);
+    }
+  }
+
+  function _drawPlinkoBoard(ctx, W, H, balls, players, finishOrder) {
+    const N = balls.length;
+    if (!N) return;
+    const sorted = [...balls].sort((a, b) => {
+      if (a.finished && b.finished) return finishOrder.indexOf(a.playerIdx) - finishOrder.indexOf(b.playerIdx);
+      if (a.finished) return -1; if (b.finished) return 1;
+      return b.y - a.y;
+    });
+    const lh = 15, pad = 5, bw = 76, bh = 8 + N*lh;
+    const bx = W - bw - 5, by = 5;
+    ctx.fillStyle = 'rgba(0,0,0,0.50)';
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 5); ctx.fill(); }
+    else ctx.fillRect(bx, by, bw, bh);
+    ctx.textBaseline = 'middle'; ctx.font = 'bold 9px sans-serif';
+    for (let i = 0; i < sorted.length; i++) {
+      const b    = sorted[i];
+      const ty   = by + 5 + i*lh + lh/2;
+      const name = (players[b.playerIdx] || '?').slice(0, 5);
+      ctx.fillStyle = b.finished ? '#ffd700' : COLORS[b.playerIdx % COLORS.length];
+      ctx.textAlign = 'left';
+      ctx.fillText(`${i+1}. ${name}`, bx + pad, ty);
+      if (b.finished) {
+        ctx.fillStyle = '#ffd700'; ctx.textAlign = 'right';
+        ctx.fillText('✓', bx + bw - 3, ty);
+      }
+    }
+  }
+
 })();

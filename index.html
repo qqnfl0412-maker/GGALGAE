@@ -447,9 +447,18 @@
     <div class="minigame-modal-content">
       <div class="minigame-header">
         <span id="miniGameTitle" class="minigame-header-title">게임</span>
+        <button id="miniGameStartBtn" type="button" class="minigame-start-btn" onclick="_startMiniGame()" style="display:none;">시작</button>
+        <button id="miniGameCourseBtn" type="button" class="minigame-course-btn" onclick="_changePlinkoCourse()" style="display:none;">코스 1</button>
         <button type="button" class="minigame-close-btn" onclick="_closeMiniGame()">✕</button>
       </div>
+      <!-- 사다리타기: 상단 슬롯 (선수 배치) -->
+      <div id="ladderTopSlots" class="ladder-slots-row" style="display:none;"></div>
       <canvas id="miniGameCanvas" class="minigame-canvas"></canvas>
+      <!-- 사다리타기: 하단 슬롯 (결과 배치) -->
+      <div id="ladderBottomSlots" class="ladder-slots-row" style="display:none;"></div>
+      <!-- 선수/결과 선택 팝업 -->
+      <div id="ladderPickerBackdrop" class="ladder-picker-backdrop hidden" onclick="_closeLadderPicker()"></div>
+      <div id="ladderPickerPopup" class="ladder-picker-popup hidden"></div>
       <div id="miniGameResultPanel" class="minigame-result-panel" style="display:none;"></div>
       <div id="miniGameActions" class="minigame-actions">
         <button type="button" class="minigame-confirm-btn" onclick="_confirmMiniGame()">결과 반영</button>
