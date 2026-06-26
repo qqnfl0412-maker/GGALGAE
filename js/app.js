@@ -57,6 +57,8 @@ window.matchSaveTimers = {};
 window.suppressRoomReloadUntil = 0;
 window.suppressMatchesReloadUntil = 0;
 window.localMatchDirtyUntil = {};
+
+window.miniGameActive = false;
 window.scoreButtonsLocked = false;
 window.scoreInputBusy = false;
 window.hostActionBusy = false;
@@ -365,12 +367,26 @@ function refreshRoundActionButtons() {
 
   if (isCurrentRoundCompleted()) {
     if (nextRoundBtn) nextRoundBtn.style.display = "inline-block";
+    refreshMiniGameButtons("next");
     return;
   }
 
   if (window.isHost && window.round === 0 && !window.roundLocked) {
     if (makeBtn) makeBtn.style.display = "inline-block";
+    refreshMiniGameButtons("make");
+    return;
   }
+
+  refreshMiniGameButtons("none");
+}
+
+function refreshMiniGameButtons(which) {
+  const row0 = document.getElementById("miniGameBtnRow0");
+  const row1 = document.getElementById("miniGameBtnRow1");
+  if (!row0 || !row1) return;
+  const show = window.isHost && window.miniGameActive;
+  row0.style.display = (show && which === "make") ? "flex" : "none";
+  row1.style.display = (show && which === "next") ? "flex" : "none";
 }
 
 function addHistory(text) {
@@ -4516,4 +4532,167 @@ function downloadIcon(size) {
   a.href     = out.toDataURL("image/png");
   a.download = `icon-${size}.png`;
   a.click();
+}
+
+/* ════════════════════════════════
+   미니게임 (사다리타기 / 핀볼)
+════════════════════════════════ */
+function toggleMiniGame() {
+  window.miniGameActive = !window.miniGameActive;
+  const btn = document.getElementById("miniGameToggleBtn");
+  if (btn) {
+    btn.textContent = window.miniGameActive ? "게임 활성 중" : "게임 비활성";
+    btn.classList.toggle("active", window.miniGameActive);
+  }
+  refreshRoundActionButtons();
+}
+
+async function startMiniGame(gameType) {
+  if (!ensureHost("대진 생성")) return;
+
+  const isRound0Ctx = (window.round === 0 && !window.roundLocked);
+  const isNextCtx   = isCurrentRoundCompleted();
+
+  if (!isRound0Ctx && !isNextCtx) {
+    showAlert("현재 라운드가 아직 끝나지 않았어.");
+    return;
+  }
+
+  collectPlayers();
+  if (window.players.length < 4) {
+    showAlert("경기할 인원이 부족해 (최소 4명).");
+    return;
+  }
+
+  if (typeof window.openMiniGame !== "function") {
+    showAlert("미니게임 모듈을 불러오지 못했어.");
+    return;
+  }
+
+  window.openMiniGame(gameType, window.players, async (orderedPlayers) => {
+    if (!orderedPlayers) return; // cancelled
+    await applyMinigamePlan(orderedPlayers, isNextCtx);
+  });
+}
+
+async function applyMinigamePlan(orderedPlayers, needsRoundAdvance) {
+  if (!orderedPlayers || !orderedPlayers.length) return;
+  if (!ensureHost("대진 생성")) return;
+
+  const maxCourts  = (window.APP_CONFIG && window.APP_CONFIG.game && window.APP_CONFIG.game.maxCourts) || 3;
+  const matchCount = Math.min(Math.floor(orderedPlayers.length / 4), maxCourts);
+
+  const plan = {
+    waitingPlayers: orderedPlayers.slice(matchCount * 4),
+    matches: Array.from({ length: matchCount }, (_, i) => ({
+      dbId: null,
+      matchIndex: i,
+      teams: [
+        [orderedPlayers[i * 4], orderedPlayers[i * 4 + 1]],
+        [orderedPlayers[i * 4 + 2], orderedPlayers[i * 4 + 3]]
+      ],
+      finished: false,
+      scoreA: 0, scoreB: 0,
+      scoreHistory: [], winnerIndex: null, scoreSeq: 0
+    }))
+  };
+
+  if (needsRoundAdvance) {
+    await _advanceToNextRoundWithPlan(plan);
+  } else {
+    if (!beginHostAction()) return;
+    try {
+      if (window.round <= 0) window.round = 1;
+      await _applyMatchPlan(plan);
+    } finally {
+      endHostAction();
+    }
+  }
+}
+
+async function _advanceToNextRoundWithPlan(plan) {
+  if (!beginHostAction()) return;
+  try {
+    const pendingIndexes = Object.keys(window.matchSaveTimers)
+      .filter(key => !!window.matchSaveTimers[key])
+      .map(Number);
+    for (const idx of pendingIndexes) {
+      await flushMatchSave(idx);
+    }
+
+    window.nextRoundRequestId = "";
+    window.nextRoundRequestedRound = 0;
+
+    if (window.restoredCompletedRound) {
+      saveRestoredCompletedRoundSnapshot();
+      window.roundSnapshots = window.roundSnapshots.slice(0, window.restoredSnapshotIndex + 1);
+      const savedSnapshot = window.roundSnapshots[window.restoredSnapshotIndex];
+      applyAfterCommitState(savedSnapshot.afterCommitState);
+      window.restoredCompletedRound = false;
+      window.restoredSnapshotIndex = -1;
+      window.round = savedSnapshot.afterCommitState.round + 1;
+    } else {
+      window.round++;
+    }
+
+    window.currentMatches = [];
+    window.currentWaitingPlayers = [];
+    window.currentRoundPenalties = [];
+    window.resultCount = 0;
+    window.neededResults = 0;
+    window.roundLocked = false;
+
+    markMatchesReloadSuppressed(1600);
+    markRoomReloadSuppressed(900);
+
+    renderMatches();
+    updateScore();
+    refreshRoundActionButtons();
+    clearSelectedMatch();
+
+    await saveRoomStateOnly();
+    await _applyMatchPlan(plan);
+    setTimeout(() => loadRoomStateFromServer(), 150);
+  } finally {
+    endHostAction();
+  }
+}
+
+async function _applyMatchPlan(plan) {
+  // Assumes caller holds the host action lock.
+  // Mirrors makeMatch() logic after plan selection.
+  if (!plan || !plan.matches.length) return;
+
+  const pendingIndexes = Object.keys(window.matchSaveTimers)
+    .filter(key => !!window.matchSaveTimers[key])
+    .map(Number);
+  for (const idx of pendingIndexes) {
+    await flushMatchSave(idx);
+  }
+
+  window.resultCount = 0;
+  window.neededResults = plan.matches.length;
+  window.roundEndCommitted = false;
+  window.currentMatches = plan.matches;
+  window.currentWaitingPlayers = plan.waitingPlayers;
+  window.currentRoundPenalties = [];
+  window.roundLocked = true;
+  window.participantCanSeeNextRound = false;
+  window.nextRoundRequestId = "";
+  window.nextRoundRequestedRound = 0;
+  refreshRoundActionButtons();
+
+  window.currentRoundHistoryLines = getHistorySeedForNewRound();
+  addHistory(`===== Round ${window.round} =====`);
+  if (window.currentWaitingPlayers.length) {
+    addHistory(`대기 : ${window.currentWaitingPlayers.join(" / ")}`);
+  }
+
+  renderMatches();
+  updateScore();
+
+  const ok = await replaceAllMatchesOnServer();
+  if (!ok) return;
+  await saveRoomStateOnly();
+  setTimeout(() => loadRoomStateFromServer(), 150);
 }

@@ -28,6 +28,7 @@
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="css/common.css">
   <link rel="stylesheet" href="css/scoreboard.css">
+  <link rel="stylesheet" href="css/minigame.css">
 </head>
 <body>
   <div id="splashScreen" class="splash">
@@ -137,7 +138,15 @@
           <h3>라운드 제어</h3>
           <div class="btn-grid-1">
             <button id="makeBtn" onclick="makeMatch()">대진 생성</button>
+            <div id="miniGameBtnRow0" class="mini-game-btn-row" style="display:none;">
+              <button type="button" onclick="startMiniGame('ladder')">사다리타기</button>
+              <button type="button" onclick="startMiniGame('plinko')">핀볼</button>
+            </div>
             <button id="nextRoundBtn" onclick="goNextRound()" style="display:none;">다음 라운드</button>
+            <div id="miniGameBtnRow1" class="mini-game-btn-row" style="display:none;">
+              <button type="button" onclick="startMiniGame('ladder')">사다리타기</button>
+              <button type="button" onclick="startMiniGame('plinko')">핀볼</button>
+            </div>
             <button class="gray" onclick="undoRound()">이전 완료 라운드로 복구</button>
           </div>
         </div>
@@ -252,6 +261,13 @@
           <div class="input-grid-2">
             <select id="penaltyPlayer"></select>
             <button type="button" onclick="addPenalty()">핸디캡 패 +1</button>
+          </div>
+        </div>
+
+        <div class="card hostOnly">
+          <h3>게임 활성 <span class="room-badge">방장 전용</span></h3>
+          <div class="btn-grid-1">
+            <button id="miniGameToggleBtn" type="button" class="minigame-toggle-btn" onclick="toggleMiniGame()">게임 비활성</button>
           </div>
         </div>
 
@@ -426,11 +442,28 @@
     </div>
   </div>
 
+  <!-- 미니게임 모달 -->
+  <div id="miniGameModal" class="minigame-modal hidden">
+    <div class="minigame-modal-content">
+      <div class="minigame-header">
+        <span id="miniGameTitle" class="minigame-header-title">게임</span>
+        <button type="button" class="minigame-close-btn" onclick="_closeMiniGame()">✕</button>
+      </div>
+      <canvas id="miniGameCanvas" class="minigame-canvas"></canvas>
+      <div id="miniGameResultPanel" class="minigame-result-panel" style="display:none;"></div>
+      <div id="miniGameActions" class="minigame-actions">
+        <button type="button" class="minigame-confirm-btn" onclick="_confirmMiniGame()">결과 반영</button>
+        <button type="button" class="minigame-cancel-btn" onclick="_cancelMiniGame()">취소</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/app-config.js"></script>
   <script src="js/supabase-config.js"></script>
   <script src="js/scoreboard.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/minigame.js"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
