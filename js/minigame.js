@@ -60,7 +60,9 @@
 
       if (gameType === 'ladder') {
         canvas.width  = w;
-        canvas.height = Math.round(Math.min(window.innerHeight * 0.38, 268));
+        canvas.height = Math.round(Math.min(window.innerHeight * 0.40, 290));
+        const laneNums = document.getElementById('ladderLaneNumbers');
+        if (laneNums) laneNums.style.display = 'flex';
         topSlots.style.display = 'flex';
         botSlots.style.display = 'flex';
         if (startBtn)  { startBtn.style.display = 'inline-block'; startBtn.disabled = false; }
@@ -87,7 +89,7 @@
   };
 
   window._startMiniGame = function () {
-    if (_gameType === 'ladder' && _L && _L.phase === 'setup') {
+    if (_gameType === 'ladder' && _L && _L.phase !== 'done') {
       _startLadderAnim();
     } else if (_gameType === 'plinko' && _P && _P.phase === 'setup') {
       _startPlinkoRace();
@@ -159,8 +161,10 @@
     _onResult = null; _orderedPlayers = null; _gameType = null; _L = null; _P = null;
     const m  = document.getElementById('miniGameModal');
     if (m) m.classList.add('hidden');
+    const ln = document.getElementById('ladderLaneNumbers');
     const ts = document.getElementById('ladderTopSlots');
     const bs = document.getElementById('ladderBottomSlots');
+    if (ln) { ln.style.display = 'none'; ln.innerHTML = ''; }
     if (ts) { ts.style.display = 'none'; ts.innerHTML = ''; }
     if (bs) { bs.style.display = 'none'; bs.innerHTML = ''; }
     const cb = document.getElementById('miniGameCourseBtn');
@@ -219,7 +223,7 @@
     for (let r = 0; r < rows; r++) {
       let c = 0;
       while (c < N - 1) {
-        if (Math.random() < 0.44) { grid[r][c] = true; c += 2; }
+        if (Math.random() < 0.58) { grid[r][c] = true; c += 2; }
         else c++;
       }
     }
@@ -229,8 +233,8 @@
   function _traceLadder(rungs, start, numRows) {
     let lane = start;
     for (let r = 0; r < numRows; r++) {
-      if (lane < rungs[r].length && rungs[r][lane])     lane++;
-      else if (lane > 0 && rungs[r][lane - 1])          lane--;
+      if (lane < rungs[r].length && rungs[r][lane])    lane++;
+      else if (lane > 0 && rungs[r][lane - 1])         lane--;
     }
     return lane;
   }
@@ -242,7 +246,7 @@
 
   function _initLadder(canvas, players, onDone) {
     const N        = players.length;
-    const numRows  = Math.max(8, Math.min(14, N + 4));
+    const numRows  = Math.max(14, Math.min(22, N + 9));
     const rungs    = _genLadder(N, numRows);
     const finals   = players.map((_, i) => _traceLadder(rungs, i, numRows));
     const mc       = Math.min(Math.floor(N / 4), 6);
@@ -253,19 +257,18 @@
       topAssign: [...players],
       botOrder:  Array.from({ length: N }, (_, i) => i),
       defLabels,
-      phase:        'setup',  // 'setup' | 'running' | 'reveal' | 'done'
-      coverAlpha:   1.0,
-      animProgress: 0,
-      animStartTs:  null,
-      ANIM_DURATION:   2400,
-      REVEAL_DURATION: 900,
-      revealStartTs:   null,
-      paths:    null,
-      pickerType:    null,
-      pickerSlotIdx: -1,
-      onDone
+      phase: 'setup',   // 'setup' | 'revealed' | 'done'
+      playerState: Array.from({ length: N }, () => ({
+        status: 'waiting',  // 'waiting' | 'running' | 'done'
+        progress: 0,
+        startTs: null,
+      })),
+      paths: null,
+      ANIM_DURATION: 1800,
+      onDone,
     };
 
+    _L.paths = Array.from({ length: N }, (_, pi) => _computePath(pi));
     _updateSlotButtons();
     _drawLadder();
   }
@@ -273,160 +276,144 @@
   /* ── slot buttons ── */
   function _updateSlotButtons() {
     if (!_L) return;
-    const { N, players, topAssign, botOrder, defLabels, phase } = _L;
-    const editable = (phase === 'setup');
+    const { N, topAssign, botOrder, defLabels, phase, playerState } = _L;
 
+    // Lane number row
+    const numEl = document.getElementById('ladderLaneNumbers');
+    if (numEl) {
+      numEl.innerHTML = '';
+      for (let i = 0; i < N; i++) {
+        const d = document.createElement('div');
+        d.className = 'ladder-slot-number';
+        d.textContent = i + 1;
+        numEl.appendChild(d);
+      }
+    }
+
+    // Player name slots — click = start that player
     const topSlots = document.getElementById('ladderTopSlots');
+    if (topSlots) {
+      topSlots.innerHTML = '';
+      for (let i = 0; i < N; i++) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ladder-slot-btn ladder-slot-top';
+        const nm = topAssign[i] || '?';
+        btn.textContent = nm.length > 3 ? nm.slice(0, 3) : nm;
+        btn.title = nm;
+        btn.style.color = COLORS[i % COLORS.length];
+
+        const ps = phase !== 'done' ? playerState[i] : null;
+        if (ps && ps.status === 'waiting') {
+          (function (idx) { btn.onclick = () => _startPlayerAt(idx); })(i);
+        } else {
+          btn.disabled = true;
+          if (ps && ps.status === 'running') btn.style.opacity = '0.65';
+          else btn.style.opacity = '0.40';
+        }
+        topSlots.appendChild(btn);
+      }
+    }
+
+    // Bottom result slots (display only)
     const botSlots = document.getElementById('ladderBottomSlots');
-    if (!topSlots || !botSlots) return;
-
-    topSlots.innerHTML = '';
-    for (let i = 0; i < N; i++) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'ladder-slot-btn ladder-slot-top';
-      const colorIdx = Math.max(0, players.indexOf(topAssign[i]));
-      btn.style.color = COLORS[colorIdx % COLORS.length];
-      const nm = topAssign[i] || '?';
-      btn.textContent = nm.length > 3 ? nm.slice(0, 3) : nm;
-      btn.title = nm;
-      if (editable) {
-        (function (idx) { btn.onclick = () => _openTopPicker(idx); })(i);
-      } else {
+    if (botSlots) {
+      botSlots.innerHTML = '';
+      for (let i = 0; i < N; i++) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ladder-slot-btn ladder-slot-bottom';
+        btn.textContent = defLabels[botOrder[i]];
         btn.disabled = true;
+        botSlots.appendChild(btn);
       }
-      topSlots.appendChild(btn);
-    }
-
-    botSlots.innerHTML = '';
-    for (let i = 0; i < N; i++) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'ladder-slot-btn ladder-slot-bottom';
-      btn.textContent = defLabels[botOrder[i]];
-      if (editable) {
-        (function (idx) { btn.onclick = () => _openBottomPicker(idx); })(i);
-      } else {
-        btn.disabled = true;
-      }
-      botSlots.appendChild(btn);
     }
   }
 
-  /* ── pickers ── */
-  function _openTopPicker(slotIdx) {
-    if (!_L || _L.phase !== 'setup') return;
-    _L.pickerType    = 'top';
-    _L.pickerSlotIdx = slotIdx;
+  /* ── start a single player's animation ── */
+  function _startPlayerAt(laneIdx) {
+    if (!_L || _L.phase === 'done') return;
+    const ps = _L.playerState[laneIdx];
+    if (!ps || ps.status !== 'waiting') return;
 
-    const popup = document.getElementById('ladderPickerPopup');
-    const bd    = document.getElementById('ladderPickerBackdrop');
+    if (_L.phase === 'setup') {
+      _L.phase = 'revealed';
+    }
 
-    popup.innerHTML = _L.players.map((p, i) => {
-      const isCur = (_L.topAssign[slotIdx] === p);
-      return `<button type="button" class="ladder-picker-item${isCur ? ' active' : ''}" onclick="_selectPickerItem(${i})">${_esc(p)}</button>`;
-    }).join('');
-
-    _positionPicker(slotIdx, 'top');
-    popup.classList.remove('hidden');
-    bd.classList.remove('hidden');
-  }
-
-  function _openBottomPicker(slotIdx) {
-    if (!_L || _L.phase !== 'setup') return;
-    _L.pickerType    = 'bottom';
-    _L.pickerSlotIdx = slotIdx;
-
-    const popup = document.getElementById('ladderPickerPopup');
-    const bd    = document.getElementById('ladderPickerBackdrop');
-    const { defLabels, botOrder } = _L;
-
-    popup.innerHTML = botOrder.map((roleIdx, i) => {
-      const isCur = (i === slotIdx);
-      return `<button type="button" class="ladder-picker-item${isCur ? ' active' : ''}" onclick="_selectPickerItem(${i})">${_esc(defLabels[roleIdx])}</button>`;
-    }).join('');
-
-    _positionPicker(slotIdx, 'bottom');
-    popup.classList.remove('hidden');
-    bd.classList.remove('hidden');
-  }
-
-  function _positionPicker(slotIdx, which) {
-    const popup   = document.getElementById('ladderPickerPopup');
-    const slotsEl = document.getElementById(which === 'top' ? 'ladderTopSlots' : 'ladderBottomSlots');
-    if (!popup || !slotsEl) return;
-
-    const btns = slotsEl.querySelectorAll('.ladder-slot-btn');
-    if (slotIdx >= btns.length) return;
-
-    const btnRect = btns[slotIdx].getBoundingClientRect();
-    // Picker max-height is 192px (set in CSS)
-    let top  = (which === 'top') ? (btnRect.bottom + 4) : (btnRect.top - 196);
-    if (top < 4) top = btnRect.bottom + 4;
-    let left = Math.max(4, Math.min(btnRect.left, window.innerWidth - 148));
-
-    popup.style.top  = top + 'px';
-    popup.style.left = left + 'px';
-  }
-
-  /* ── animation ── */
-  function _startLadderAnim() {
-    if (!_L) return;
-    const startBtn = document.getElementById('miniGameStartBtn');
-    if (startBtn) startBtn.style.display = 'none';
-    _L.phase = 'running';
+    ps.status = 'running';
     _updateSlotButtons();
-    _L.animStartTs = null;
-    _L.animProgress = 0;
 
-    function tick(ts) {
-      if (!_L.animStartTs) _L.animStartTs = ts;
-      _L.animProgress = Math.min((ts - _L.animStartTs) / _L.ANIM_DURATION, 1);
-      _drawLadder();
-      if (_L.animProgress < 1) {
-        _animFrame = requestAnimationFrame(tick);
-      } else {
-        _animFrame = null;
-        _L.phase        = 'reveal';
-        _L.coverAlpha   = 1.0;
-        _L.revealStartTs = null;
-        _L.paths = _L.players.map((_, pi) => _computePath(pi));
-        _revealLadder();
-      }
+    if (!_animFrame) {
+      _animFrame = requestAnimationFrame(_ladderTick);
     }
-    _animFrame = requestAnimationFrame(tick);
   }
 
-  function _revealLadder() {
-    function tick(ts) {
-      if (!_L.revealStartTs) _L.revealStartTs = ts;
-      _L.coverAlpha = Math.max(0, 1 - (ts - _L.revealStartTs) / _L.REVEAL_DURATION);
-      _drawLadder();
-      if (_L.coverAlpha > 0) {
-        _animFrame = requestAnimationFrame(tick);
-      } else {
-        _animFrame = null;
-        _L.phase      = 'done';
-        _L.coverAlpha = 0;
-        _drawLadder();
-        _deliverResult();
-      }
+  /* ── start all remaining (시작 button / 나머지 일괄 출발) ── */
+  function _startLadderAnim() {
+    if (!_L || _L.phase === 'done') return;
+
+    if (_L.phase === 'setup') _L.phase = 'revealed';
+
+    let anyNew = false;
+    for (const ps of _L.playerState) {
+      if (ps.status === 'waiting') { ps.status = 'running'; anyNew = true; }
     }
-    _animFrame = requestAnimationFrame(tick);
+    _updateSlotButtons();
+
+    if (anyNew && !_animFrame) {
+      _animFrame = requestAnimationFrame(_ladderTick);
+    }
   }
 
+  /* ── per-player animation tick ── */
+  function _ladderTick(ts) {
+    if (!_L) { _animFrame = null; return; }
+    const { playerState, ANIM_DURATION } = _L;
+
+    let anyRunning = false;
+    for (const ps of playerState) {
+      if (ps.status !== 'running') continue;
+      if (!ps.startTs) ps.startTs = ts;
+      ps.progress = Math.min((ts - ps.startTs) / ANIM_DURATION, 1);
+      if (ps.progress >= 1) {
+        ps.status = 'done';
+        ps.progress = 1;
+      } else {
+        anyRunning = true;
+      }
+    }
+
+    _drawLadder();
+
+    if (playerState.every(ps => ps.status === 'done')) {
+      _animFrame = null;
+      _L.phase = 'done';
+      _updateSlotButtons();
+      const sb = document.getElementById('miniGameStartBtn');
+      if (sb) sb.style.display = 'none';
+      _deliverResult();
+      return;
+    }
+
+    if (anyRunning) {
+      _animFrame = requestAnimationFrame(_ladderTick);
+    } else {
+      _animFrame = null;
+    }
+  }
+
+  /* ── result delivery ── */
   function _deliverResult() {
     if (!_L) return;
     const { topAssign, finals, botOrder, N, onDone } = _L;
     const orderedPlayers = new Array(N).fill('');
     for (let lane = 0; lane < N; lane++) {
-      const finalPos = finals[lane];
-      const roleIdx  = botOrder[finalPos];
-      orderedPlayers[roleIdx] = topAssign[lane];
+      orderedPlayers[botOrder[finals[lane]]] = topAssign[lane];
     }
-    setTimeout(() => { if (_L) onDone(orderedPlayers); }, 400);
+    setTimeout(() => { if (_L) onDone(orderedPlayers); }, 500);
   }
 
+  /* ── path computation ── */
   function _computePath(playerIdx) {
     const { canvas, N, numRows, rungs } = _L;
     const H    = canvas.height;
@@ -437,7 +424,6 @@
     for (let r = 0; r < numRows; r++) {
       const midY = (r + 0.5) * rowH;
       pts.push({ x: _laneX(lane), y: midY });
-
       if (lane < N - 1 && rungs[r][lane]) {
         lane++;
         pts.push({ x: _laneX(lane), y: midY });
@@ -482,22 +468,71 @@
   /* ── canvas draw ── */
   function _drawLadder() {
     if (!_L) return;
-    const { canvas, N, numRows, rungs, finals, topAssign, phase, animProgress, coverAlpha, paths } = _L;
+    const { canvas, N, numRows, rungs, finals, topAssign, phase, playerState, paths } = _L;
     const ctx  = canvas.getContext('2d');
     const W    = canvas.width, H = canvas.height;
     const rowH = H / numRows;
 
     ctx.clearRect(0, 0, W, H);
+
+    /* === SETUP: eye-catching blindfold === */
+    if (phase === 'setup') {
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0,    '#1a5fa8');
+      grad.addColorStop(0.35, '#0c3e82');
+      grad.addColorStop(0.65, '#0c3e82');
+      grad.addColorStop(1,    '#1a5fa8');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+
+      /* diagonal stripe pattern */
+      ctx.save();
+      ctx.globalAlpha = 0.07;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth   = 16;
+      for (let x = -H; x < W + H; x += 30) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + H, H);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      /* lane lines (visible through cover) */
+      ctx.globalAlpha = 0.20;
+      ctx.lineWidth   = 1.5;
+      ctx.strokeStyle = '#90c8ff';
+      for (let i = 0; i < N; i++) {
+        ctx.beginPath();
+        ctx.moveTo(_laneX(i), 0);
+        ctx.lineTo(_laneX(i), H);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      /* hint text */
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.font      = '22px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🔒', W / 2, H / 2 - 20);
+      ctx.font      = '12px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.38)';
+      ctx.fillText('선수 이름 클릭 또는 시작 버튼', W / 2, H / 2 + 14);
+      return;
+    }
+
+    /* === REVEALED / DONE: draw ladder === */
     ctx.fillStyle = '#131620';
     ctx.fillRect(0, 0, W, H);
 
-    // 1. Rungs (drawn under the cover)
-    ctx.lineWidth = 2;
+    /* 1. Rungs */
+    ctx.lineWidth   = 2;
+    ctx.strokeStyle = '#7080b0';
     for (let r = 0; r < numRows; r++) {
       const y = (r + 0.5) * rowH;
       for (let c = 0; c < N - 1; c++) {
         if (rungs[r][c]) {
-          ctx.strokeStyle = '#7080b0';
           ctx.beginPath();
           ctx.moveTo(_laneX(c), y);
           ctx.lineTo(_laneX(c + 1), y);
@@ -506,45 +541,30 @@
       }
     }
 
-    // 2. Path highlights (reveal / done)
-    if ((phase === 'reveal' || phase === 'done') && paths) {
-      const alpha = (1 - coverAlpha) * 0.88;
-      if (alpha > 0) {
-        ctx.lineCap    = 'round';
-        ctx.lineJoin   = 'round';
-        ctx.lineWidth  = 3.5;
-        for (let pi = 0; pi < N; pi++) {
-          const [r, g, b] = _hexToRgb(COLORS[pi % COLORS.length]);
-          ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
-          ctx.beginPath();
-          paths[pi].forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
-          ctx.stroke();
-        }
-      }
+    /* 2. Completed path highlights */
+    ctx.lineCap  = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 3.5;
+    for (let pi = 0; pi < N; pi++) {
+      if (playerState[pi].status !== 'done') continue;
+      const [r, g, b] = _hexToRgb(COLORS[pi % COLORS.length]);
+      ctx.strokeStyle = `rgba(${r},${g},${b},0.84)`;
+      ctx.beginPath();
+      paths[pi].forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
+      ctx.stroke();
     }
 
-    // 3. Animated markers (running — drawn before cover so cover hides them in middle)
-    if (phase === 'running') {
-      for (let pi = 0; pi < N; pi++) {
-        const { x, y } = _getMarkerPos(pi, animProgress);
-        _drawMarker(ctx, x, y, COLORS[pi % COLORS.length], topAssign[pi], 1.0);
-      }
+    /* 3. Moving markers */
+    for (let pi = 0; pi < N; pi++) {
+      const ps = playerState[pi];
+      if (ps.status !== 'running') continue;
+      const { x, y } = _getMarkerPos(pi, ps.progress);
+      _drawMarker(ctx, x, y, COLORS[pi % COLORS.length], topAssign[pi], 1.0);
     }
 
-    // 4. Cover gradient (hides middle section)
-    if (coverAlpha > 0.001) {
-      const c    = coverAlpha;
-      const grad = ctx.createLinearGradient(0, 0, 0, H);
-      grad.addColorStop(0,    `rgba(19,22,32,0)`);
-      grad.addColorStop(0.13, `rgba(19,22,32,${c})`);
-      grad.addColorStop(0.87, `rgba(19,22,32,${c})`);
-      grad.addColorStop(1,    `rgba(19,22,32,0)`);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, W, H);
-    }
-
-    // 5. Lane lines (always on top)
+    /* 4. Lane lines (always on top) */
     ctx.lineWidth = 2;
+    ctx.lineCap   = 'butt';
     for (let i = 0; i < N; i++) {
       ctx.strokeStyle = '#4a5078';
       ctx.beginPath();
@@ -553,16 +573,10 @@
       ctx.stroke();
     }
 
-    // 6. Final markers at bottom (visible as cover fades)
-    if (phase === 'reveal' || phase === 'done') {
-      const alpha = 1 - coverAlpha;
-      if (alpha > 0.05) {
-        for (let pi = 0; pi < N; pi++) {
-          const fx = _laneX(finals[pi]);
-          const fy = H - 11;
-          _drawMarker(ctx, fx, fy, COLORS[pi % COLORS.length], topAssign[pi], alpha);
-        }
-      }
+    /* 5. Done-player final markers at bottom */
+    for (let pi = 0; pi < N; pi++) {
+      if (playerState[pi].status !== 'done') continue;
+      _drawMarker(ctx, _laneX(finals[pi]), H - 11, COLORS[pi % COLORS.length], topAssign[pi], 1.0);
     }
   }
 
@@ -579,8 +593,7 @@
     ctx.fillStyle    = `rgba(255,255,255,${alpha})`;
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
-    const lbl = name.length > 2 ? name.slice(0, 2) : name;
-    ctx.fillText(lbl, x, y);
+    ctx.fillText(name.length > 2 ? name.slice(0, 2) : name, x, y);
   }
 
   /* ============================================================

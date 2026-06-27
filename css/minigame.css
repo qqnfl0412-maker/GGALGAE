@@ -173,6 +173,30 @@
 /* ============================================================
    사다리타기: top / bottom slot rows
    ============================================================ */
+
+/* lane-number row (above player names) */
+.ladder-numbers-row {
+  border-bottom: 1px solid #1e2236;
+}
+
+.ladder-slot-number {
+  flex: 1;
+  min-width: 0;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 2px;
+  text-align: center;
+  color: #4a5880;
+  border-left: 1px solid #1e2236;
+  background: #10121e;
+  user-select: none;
+  pointer-events: none;
+}
+
+.ladder-slot-number:first-child {
+  border-left: none;
+}
+
 .ladder-slots-row {
   display: flex;
   flex-direction: row;
