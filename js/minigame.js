@@ -60,12 +60,12 @@
 
       if (gameType === 'ladder') {
         canvas.width  = w;
-        canvas.height = Math.round(Math.min(window.innerHeight * 0.40, 290));
+        canvas.height = Math.round(Math.min(window.innerHeight * 0.58, 430));
         const laneNums = document.getElementById('ladderLaneNumbers');
         if (laneNums) laneNums.style.display = 'flex';
         topSlots.style.display = 'flex';
         botSlots.style.display = 'flex';
-        if (startBtn)  { startBtn.style.display = 'inline-block'; startBtn.disabled = false; }
+        if (startBtn)  { startBtn.style.display = 'inline-block'; startBtn.disabled = false; startBtn.textContent = '시작'; }
         if (courseBtn) courseBtn.style.display = 'none';
         _initLadder(canvas, players, (ordered) => {
           _orderedPlayers = ordered;
@@ -223,7 +223,7 @@
     for (let r = 0; r < rows; r++) {
       let c = 0;
       while (c < N - 1) {
-        if (Math.random() < 0.58) { grid[r][c] = true; c += 2; }
+        if (Math.random() < 0.68) { grid[r][c] = true; c += 2; }
         else c++;
       }
     }
@@ -246,7 +246,7 @@
 
   function _initLadder(canvas, players, onDone) {
     const N        = players.length;
-    const numRows  = Math.max(14, Math.min(22, N + 9));
+    const numRows  = Math.max(20, Math.min(30, N + 14));
     const rungs    = _genLadder(N, numRows);
     const finals   = players.map((_, i) => _traceLadder(rungs, i, numRows));
     const mc       = Math.min(Math.floor(N / 4), 6);
@@ -264,7 +264,9 @@
         startTs: null,
       })),
       paths: null,
-      ANIM_DURATION: 1800,
+      ANIM_DURATION: 3600,
+      pickerType: null,
+      pickerSlotIdx: -1,
       onDone,
     };
 
@@ -290,7 +292,7 @@
       }
     }
 
-    // Player name slots — click = start that player
+    // Player name slots
     const topSlots = document.getElementById('ladderTopSlots');
     if (topSlots) {
       topSlots.innerHTML = '';
@@ -303,13 +305,21 @@
         btn.title = nm;
         btn.style.color = COLORS[i % COLORS.length];
 
-        const ps = phase !== 'done' ? playerState[i] : null;
-        if (ps && ps.status === 'waiting') {
-          (function (idx) { btn.onclick = () => _startPlayerAt(idx); })(i);
+        if (phase === 'setup') {
+          // Setup: click to rearrange via picker
+          (function (idx) { btn.onclick = () => _openTopPicker(idx); })(i);
+        } else if (phase === 'revealed') {
+          // Revealed: click to start that player
+          const ps = playerState[i];
+          if (ps.status === 'waiting') {
+            (function (idx) { btn.onclick = () => _startPlayerAt(idx); })(i);
+          } else {
+            btn.disabled = true;
+            btn.style.opacity = ps.status === 'running' ? '0.65' : '0.40';
+          }
         } else {
           btn.disabled = true;
-          if (ps && ps.status === 'running') btn.style.opacity = '0.65';
-          else btn.style.opacity = '0.40';
+          btn.style.opacity = '0.40';
         }
         topSlots.appendChild(btn);
       }
@@ -330,15 +340,48 @@
     }
   }
 
-  /* ── start a single player's animation ── */
+  /* ── picker (setup only) ── */
+  function _openTopPicker(slotIdx) {
+    if (!_L || _L.phase !== 'setup') return;
+    _L.pickerType    = 'top';
+    _L.pickerSlotIdx = slotIdx;
+
+    const popup = document.getElementById('ladderPickerPopup');
+    const bd    = document.getElementById('ladderPickerBackdrop');
+    if (!popup || !bd) return;
+
+    popup.innerHTML = _L.players.map((p, i) => {
+      const isCur = (_L.topAssign[slotIdx] === p);
+      return `<button type="button" class="ladder-picker-item${isCur ? ' active' : ''}" onclick="_selectPickerItem(${i})">${_esc(p)}</button>`;
+    }).join('');
+
+    _positionPicker(slotIdx);
+    popup.classList.remove('hidden');
+    bd.classList.remove('hidden');
+  }
+
+  function _positionPicker(slotIdx) {
+    const popup   = document.getElementById('ladderPickerPopup');
+    const slotsEl = document.getElementById('ladderTopSlots');
+    if (!popup || !slotsEl) return;
+
+    const btns = slotsEl.querySelectorAll('.ladder-slot-btn');
+    if (slotIdx >= btns.length) return;
+
+    const btnRect = btns[slotIdx].getBoundingClientRect();
+    let top  = btnRect.bottom + 4;
+    if (top + 200 > window.innerHeight) top = btnRect.top - 204;
+    const left = Math.max(4, Math.min(btnRect.left, window.innerWidth - 148));
+
+    popup.style.top  = top + 'px';
+    popup.style.left = left + 'px';
+  }
+
+  /* ── start a single player (revealed phase only) ── */
   function _startPlayerAt(laneIdx) {
-    if (!_L || _L.phase === 'done') return;
+    if (!_L || _L.phase !== 'revealed') return;
     const ps = _L.playerState[laneIdx];
     if (!ps || ps.status !== 'waiting') return;
-
-    if (_L.phase === 'setup') {
-      _L.phase = 'revealed';
-    }
 
     ps.status = 'running';
     _updateSlotButtons();
@@ -348,12 +391,21 @@
     }
   }
 
-  /* ── start all remaining (시작 button / 나머지 일괄 출발) ── */
+  /* ── 시작 / 전체 출발 button handler ── */
   function _startLadderAnim() {
     if (!_L || _L.phase === 'done') return;
 
-    if (_L.phase === 'setup') _L.phase = 'revealed';
+    if (_L.phase === 'setup') {
+      // First press: reveal ladder, change button to '전체 출발'
+      _L.phase = 'revealed';
+      _updateSlotButtons();
+      _drawLadder();
+      const sb = document.getElementById('miniGameStartBtn');
+      if (sb) sb.textContent = '전체 출발';
+      return;
+    }
 
+    // Second press (전체 출발): start all remaining 'waiting' players
     let anyNew = false;
     for (const ps of _L.playerState) {
       if (ps.status === 'waiting') { ps.status = 'running'; anyNew = true; }
@@ -376,7 +428,7 @@
       if (!ps.startTs) ps.startTs = ts;
       ps.progress = Math.min((ts - ps.startTs) / ANIM_DURATION, 1);
       if (ps.progress >= 1) {
-        ps.status = 'done';
+        ps.status   = 'done';
         ps.progress = 1;
       } else {
         anyRunning = true;
@@ -437,7 +489,7 @@
   }
 
   function _getMarkerPos(playerIdx, progress) {
-    const { N, numRows, rungs, canvas } = _L;
+    const { N, numRows, rungs, canvas, finals } = _L;
     const H    = canvas.height;
     const rowH = H / numRows;
     let lane   = playerIdx;
@@ -447,20 +499,27 @@
     const rowFrac    = curDist - completedR;
 
     for (let r = 0; r < Math.min(completedR, numRows); r++) {
-      if (lane < N - 1 && rungs[r][lane])     lane++;
+      if (lane < N - 1 && rungs[r][lane])      lane++;
       else if (lane > 0 && rungs[r][lane - 1]) lane--;
     }
 
-    let x = _laneX(lane);
-    if (completedR < numRows && rungs[completedR]) {
-      if (lane < N - 1 && rungs[completedR][lane] && rowFrac >= 0.4) {
-        const t = (rowFrac - 0.4) / 0.6;
-        x = _laneX(lane) + (_laneX(lane + 1) - _laneX(lane)) * t;
-      } else if (lane > 0 && rungs[completedR][lane - 1] && rowFrac >= 0.4) {
-        const t = (rowFrac - 0.4) / 0.6;
-        x = _laneX(lane) + (_laneX(lane - 1) - _laneX(lane)) * t;
+    let x;
+    // Last 4 rows: snap straight to final lane — no lateral sliding near bottom
+    if (completedR >= numRows - 4) {
+      x = _laneX(finals[playerIdx]);
+    } else {
+      x = _laneX(lane);
+      if (completedR < numRows && rungs[completedR]) {
+        if (lane < N - 1 && rungs[completedR][lane] && rowFrac >= 0.4) {
+          const t = (rowFrac - 0.4) / 0.6;
+          x = _laneX(lane) + (_laneX(lane + 1) - _laneX(lane)) * t;
+        } else if (lane > 0 && rungs[completedR][lane - 1] && rowFrac >= 0.4) {
+          const t = (rowFrac - 0.4) / 0.6;
+          x = _laneX(lane) + (_laneX(lane - 1) - _laneX(lane)) * t;
+        }
       }
     }
+
     const y = Math.min(progress * (H + rowH), H);
     return { x, y };
   }
@@ -485,7 +544,6 @@
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, W, H);
 
-      /* diagonal stripe pattern */
       ctx.save();
       ctx.globalAlpha = 0.07;
       ctx.strokeStyle = '#ffffff';
@@ -498,8 +556,7 @@
       }
       ctx.restore();
 
-      /* lane lines (visible through cover) */
-      ctx.globalAlpha = 0.20;
+      ctx.globalAlpha = 0.18;
       ctx.lineWidth   = 1.5;
       ctx.strokeStyle = '#90c8ff';
       for (let i = 0; i < N; i++) {
@@ -510,15 +567,15 @@
       }
       ctx.globalAlpha = 1;
 
-      /* hint text */
-      ctx.fillStyle = 'rgba(255,255,255,0.55)';
-      ctx.font      = '22px sans-serif';
-      ctx.textAlign = 'center';
+      ctx.fillStyle    = 'rgba(255,255,255,0.55)';
+      ctx.font         = '22px sans-serif';
+      ctx.textAlign    = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('🔒', W / 2, H / 2 - 20);
-      ctx.font      = '12px sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.38)';
-      ctx.fillText('선수 이름 클릭 또는 시작 버튼', W / 2, H / 2 + 14);
+      ctx.fillText('🔒', W / 2, H / 2 - 22);
+      ctx.font      = '11px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.32)';
+      ctx.fillText('이름 클릭 → 배치 변경', W / 2, H / 2 + 8);
+      ctx.fillText('시작 버튼 → 가림막 제거', W / 2, H / 2 + 26);
       return;
     }
 
