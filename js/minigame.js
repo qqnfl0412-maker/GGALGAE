@@ -264,7 +264,7 @@
         startTs: null,
       })),
       paths: null,
-      ANIM_DURATION: 3600,
+      ANIM_DURATION: 5500,
       pickerType: null,
       pickerSlotIdx: -1,
       onDone,
@@ -489,39 +489,39 @@
   }
 
   function _getMarkerPos(playerIdx, progress) {
-    const { N, numRows, rungs, canvas, finals } = _L;
-    const H    = canvas.height;
-    const rowH = H / numRows;
-    let lane   = playerIdx;
+    const pts = _L.paths[playerIdx];
+    if (!pts || pts.length < 2) return { x: 0, y: 0 };
 
-    const curDist    = progress * numRows;
-    const completedR = Math.floor(curDist);
-    const rowFrac    = curDist - completedR;
-
-    for (let r = 0; r < Math.min(completedR, numRows); r++) {
-      if (lane < N - 1 && rungs[r][lane])      lane++;
-      else if (lane > 0 && rungs[r][lane - 1]) lane--;
+    // Build weighted segment lengths:
+    //   vertical segments → |dy| (time proportional to vertical distance)
+    //   horizontal rung crossings → |dx| * 0.28 (visible but fast)
+    const HORIZ_W = 0.28;
+    const lens = [];
+    let total = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const dy = pts[i + 1].y - pts[i].y;
+      const dx = pts[i + 1].x - pts[i].x;
+      const len = Math.abs(dy) < 0.5 ? Math.abs(dx) * HORIZ_W : Math.abs(dy);
+      lens.push(len);
+      total += len;
     }
 
-    let x;
-    // Last 4 rows: snap straight to final lane — no lateral sliding near bottom
-    if (completedR >= numRows - 4) {
-      x = _laneX(finals[playerIdx]);
-    } else {
-      x = _laneX(lane);
-      if (completedR < numRows && rungs[completedR]) {
-        if (lane < N - 1 && rungs[completedR][lane] && rowFrac >= 0.4) {
-          const t = (rowFrac - 0.4) / 0.6;
-          x = _laneX(lane) + (_laneX(lane + 1) - _laneX(lane)) * t;
-        } else if (lane > 0 && rungs[completedR][lane - 1] && rowFrac >= 0.4) {
-          const t = (rowFrac - 0.4) / 0.6;
-          x = _laneX(lane) + (_laneX(lane - 1) - _laneX(lane)) * t;
-        }
+    const target = Math.min(progress, 1) * total;
+    let cum = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i], p1 = pts[i + 1];
+      const segLen = lens[i];
+      if (target <= cum + segLen || i === pts.length - 2) {
+        const t = segLen > 0.001 ? Math.min((target - cum) / segLen, 1) : 1;
+        return {
+          x: p0.x + (p1.x - p0.x) * t,
+          y: p0.y + (p1.y - p0.y) * t,
+        };
       }
+      cum += segLen;
     }
-
-    const y = Math.min(progress * (H + rowH), H);
-    return { x, y };
+    const last = pts[pts.length - 1];
+    return { x: last.x, y: last.y };
   }
 
   /* ── canvas draw ── */
@@ -633,20 +633,27 @@
     /* 5. Done-player final markers at bottom */
     for (let pi = 0; pi < N; pi++) {
       if (playerState[pi].status !== 'done') continue;
-      _drawMarker(ctx, _laneX(finals[pi]), H - 11, COLORS[pi % COLORS.length], topAssign[pi], 1.0);
+      _drawMarker(ctx, _laneX(finals[pi]), H - 13, COLORS[pi % COLORS.length], topAssign[pi], 1.0);
     }
   }
 
   function _drawMarker(ctx, x, y, color, name, alpha) {
     const [r, g, b] = _hexToRgb(color);
+    // Outer glow
     ctx.beginPath();
-    ctx.arc(x, y, 9, 0, Math.PI * 2);
+    ctx.arc(x, y, 14, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${r},${g},${b},${alpha * 0.25})`;
+    ctx.fill();
+    // Main circle
+    ctx.beginPath();
+    ctx.arc(x, y, 11, 0, Math.PI * 2);
     ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
     ctx.fill();
-    ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.45})`;
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.65})`;
+    ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.font         = 'bold 8px sans-serif';
+    // Name label
+    ctx.font         = 'bold 9px sans-serif';
     ctx.fillStyle    = `rgba(255,255,255,${alpha})`;
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
